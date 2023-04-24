@@ -1,0 +1,38 @@
+﻿<Window x:Class="IfcComparison.SearchWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+        xmlns:local="clr-namespace:IfcComparison"
+        mc:Ignorable="d"
+        Title="SearchWindow" Height="200" Width="200" WindowStyle="None" >
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="30" />
+            <RowDefinition Height="150" />
+        </Grid.RowDefinitions>
+
+        <TextBox Grid.Row="0" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Margin="5"/>
+        <ListView Grid.Row="1" ItemsSource="{Binding SearchList}" SelectedItem="{Binding SelectedItem}" x:Name="IfcEntityListView" 
+                  Margin="5"
+                  ScrollViewer.VerticalScrollBarVisibility="Visible"
+                  ScrollViewer.CanContentScroll="True">
+            <ListView.InputBindings>
+                <KeyBinding Key="Return" Modifiers="" Command="{Binding SetSelectedItem}"/>
+            </ListView.InputBindings>
+            <i:Interaction.Triggers>
+                <i:EventTrigger EventName="MouseDoubleClick">
+                    <i:InvokeCommandAction Command="{Binding SetSelectedItem}" CommandParameter="{Binding}"/>
+                    <i:CallMethodAction x:Name="CloseWindow" MethodName="Close"
+                           TargetObject="{Binding RelativeSource={RelativeSource
+                                                  Mode=FindAncestor,
+                                                  AncestorType=Window}}" />
+                </i:EventTrigger>
+            </i:Interaction.Triggers>
+            <!--<ListView.InputBindings>
+                <KeyBinding />
+            </ListView.InputBindings>-->
+        </ListView>
+    </Grid>
+</Window>
