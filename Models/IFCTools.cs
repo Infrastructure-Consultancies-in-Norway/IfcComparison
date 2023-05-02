@@ -304,7 +304,7 @@ namespace IfcComparison.Models
                 {
                     foreach (var ifcObj in item.Value.Item2)
                     {
-                        (IPersistEntity inst, List<IIfcProperty> newProperties, List<IIfcProperty> oldProperties) ifcInstances = ((IPersistEntity)ifcObj, propsNew, propsOld);
+                        (IPersistEntity inst, List<IIfcProperty> oldProperties, List<IIfcProperty> newProperties) ifcInstances = ((IPersistEntity)ifcObj, propsOld, propsNew);
                         data.Add(ifcInstances);
                     }
 
