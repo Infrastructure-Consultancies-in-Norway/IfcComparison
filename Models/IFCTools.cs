@@ -280,6 +280,11 @@ namespace IfcComparison.Models
                 propsNew = item.Value.Item1;
                 propsOld = oldDict.ContainsKey(key) ? oldDict[key].Item1 : null;
 
+                if (key.Value.ToString() == "A1-6")
+                {
+                    ;
+                }
+
                 ////////////////////////
                 /// FOR DEBUGGING
                 //List<string> searchList = new List<string>();
@@ -613,13 +618,35 @@ namespace IfcComparison.Models
                     if (prop != null)
                     {
 
+                        //DEBUG 
+                        if (prop.NominalValue.ToString() == "A1-6")
+                        {
+                            ;   
+                        }
+
                         var relObj = rel.RelatedObjects.OfType<IIfcObject>().ToList();
                         relObj.RemoveAll(obj => !interfaceName.Contains(obj.GetType().Name));
 
-                        if (dict.ContainsKey(prop?.NominalValue))
+                        if (relObj.Count == 0)
                         {
                             continue;
                         }
+
+                        if (dict.ContainsKey(prop?.NominalValue))
+                        {
+                                var tempListObj = new List<IIfcObject>();
+                                foreach (var obj in dict[prop.NominalValue].Item2)
+                                {
+                                    tempListObj.Add(obj); 
+                                }
+                                foreach (var obj in relObj)
+                                {
+                                    tempListObj.Add(obj);
+                                }
+                                dict[prop.NominalValue] = (pset, relObj); ///CHECK THIS!!!!
+                                continue;
+                        }
+                        
                         dict.Add(prop.NominalValue, (pset, relObj));
                     }
                 }
