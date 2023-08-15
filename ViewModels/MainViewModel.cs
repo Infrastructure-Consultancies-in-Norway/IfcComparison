@@ -8,6 +8,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices.ComTypes;
 using System.Security.Principal;
 using System.Text;
 using System.Threading;
@@ -188,13 +189,17 @@ namespace IfcComparison.ViewModels
                 }
                 else
                 {
+                    Stream stream;
                     SaveFileDialog saveFileDialog = new SaveFileDialog();
                     saveFileDialog.FileName = "Settings.json";
                     saveFileDialog.Filter = "Json files (*.json)|*.json";
                     if (saveFileDialog.ShowDialog() == true)
                     {
                         UserSettingsPath = saveFileDialog.FileName;
+                        stream = saveFileDialog.OpenFile();
+                        stream.Close();
                         OutputConsole += $"Setting saved at: {UserSettingsPath}" + Environment.NewLine;
+                        ReadAndWriteJson.WriteAndSerializeAtStartup(new UserSettings(this), UserSettingsPath);
                     }
                 }
             }
