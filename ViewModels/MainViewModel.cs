@@ -157,11 +157,21 @@ namespace IfcComparison.ViewModels
 
             //}
 
+            //Load default values in comparison
+            LoadUserSettings(@"IfcComparisonSettings\\DefaultSettings.json");
+            //Set the default path to empty string and clear console on startup
+            UserSettingsPath = string.Empty;
+            ClearOutputText();
+
 
 
             IsOldIFCLoaded = "Not Loaded";
             IsNewIFCLoaded = "Not Loaded";
             IsNewIFCQALoaded = "Not Loaded";
+
+
+
+
             GetEntities();
 
 
@@ -211,9 +221,16 @@ namespace IfcComparison.ViewModels
 
         }
 
-        private void LoadUserSettings()
+        private void LoadUserSettings(string userSettingsPath = "")
         {
-            UserSettingsPath = Common.OpenFileDialogPath("json", "");
+            if (string.IsNullOrEmpty(userSettingsPath))
+            {
+                UserSettingsPath = Common.OpenFileDialogPath("json", "");
+            }
+            else
+            {
+                UserSettingsPath = userSettingsPath;
+            }
 
             if (!string.IsNullOrEmpty(UserSettingsPath))
             {
