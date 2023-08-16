@@ -157,20 +157,15 @@ namespace IfcComparison.ViewModels
 
             //}
 
-            //Load default values in comparison
+            //Load default values in comparison at startup
             LoadUserSettings(@"IfcComparisonSettings\\DefaultSettings.json");
             //Set the default path to empty string and clear console on startup
             UserSettingsPath = string.Empty;
             ClearOutputText();
 
-
-
             IsOldIFCLoaded = "Not Loaded";
             IsNewIFCLoaded = "Not Loaded";
             IsNewIFCQALoaded = "Not Loaded";
-
-
-
 
             GetEntities();
 
