@@ -490,9 +490,15 @@ namespace IfcComparison.Models
                         {
                             if (oldSingleValProps !=null)
                             {
-                                var sValProp = singleValProp.NominalValue.ToString();
-                                var oValProp = oldSingleValProps.NominalValue.ToString();
-                                if (string.Equals(sValProp, oValProp))
+                                //Null check to avoid errors where NominalValue is Null
+                                var sValProp = singleValProp.NominalValue?.ToString();
+                                var oValProp = oldSingleValProps.NominalValue?.ToString();
+                                //Writes Null if one of the old or new value are null
+                                if (sValProp == null || oValProp == null)
+                                {
+                                    valToWrite = "Null";
+                                }
+                                else if (string.Equals(sValProp, oValProp))
                                 {
                                     valToWrite = "Equal";
                                 }
@@ -614,6 +620,7 @@ namespace IfcComparison.Models
                         .SelectMany(propSet => propSet.HasProperties)
                         .ToList();
 
+                //Check if there's any property sets
                 if (pset.Any())
                 {
                     var prop = GetIfcKey(pset, comparisonOperator, comparisonMethod);
@@ -631,27 +638,15 @@ namespace IfcComparison.Models
                         var relObj = rel.RelatedObjects.OfType<IIfcObject>().ToList();
                         relObj.RemoveAll(obj => !interfaceName.Contains(obj.GetType().Name));
 
-                        if (relObj.Count == 0)
+                        //Check if there's an related objects with the interface name.
+                        if (relObj.Any())
                         {
-                            continue;
-                        }
-
-                        if (dict.ContainsKey(prop?.NominalValue))
-                        {
-                                var tempListObj = new List<IIfcObject>();
-                                foreach (var obj in dict[prop.NominalValue].Item2)
-                                {
-                                    tempListObj.Add(obj); 
-                                }
-                                foreach (var obj in relObj)
-                                {
-                                    tempListObj.Add(obj);
-                                }
-                                dict[prop.NominalValue] = (pset, relObj); ///CHECK THIS!!!!
+                            if (dict.ContainsKey(prop?.NominalValue))
+                            {
                                 continue;
+                            }
+                            dict.Add(prop.NominalValue, (pset, relObj));
                         }
-                        
-                        dict.Add(prop.NominalValue, (pset, relObj));
                     }
                 }
                 else

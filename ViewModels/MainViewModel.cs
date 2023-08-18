@@ -8,6 +8,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices.ComTypes;
 using System.Security.Principal;
 using System.Text;
 using System.Threading;
@@ -52,6 +53,9 @@ namespace IfcComparison.ViewModels
 
         private string mUserSettingsPath;
         public string UserSettingsPath { get => mUserSettingsPath; set => SetNotify(ref mUserSettingsPath, value); }
+
+        private string mVersion;
+        public string Version { get => mVersion; set => SetNotify(ref mVersion, value); }
         public Window SearchWindow { get; set; }
 
         public IfcStore OldModel { get; set; }
@@ -156,11 +160,21 @@ namespace IfcComparison.ViewModels
 
             //}
 
-
+            //Load default values in comparison at startup
+            LoadUserSettings(@"IfcComparisonSettings\\DefaultSettings.json");
+            //Set the default path to empty string and clear console on startup
+            UserSettingsPath = string.Empty;
+            ClearOutputText();
 
             IsOldIFCLoaded = "Not Loaded";
             IsNewIFCLoaded = "Not Loaded";
             IsNewIFCQALoaded = "Not Loaded";
+
+            //Add versioning to loaded assemblies
+            var versionString =  Assembly.GetExecutingAssembly().GetName().Version.ToString();
+            var appName = Assembly.GetExecutingAssembly().GetName().Name;
+            Version = $"{appName} Version: {versionString}";
+
             GetEntities();
 
 
@@ -188,13 +202,17 @@ namespace IfcComparison.ViewModels
                 }
                 else
                 {
+                    Stream stream;
                     SaveFileDialog saveFileDialog = new SaveFileDialog();
                     saveFileDialog.FileName = "Settings.json";
                     saveFileDialog.Filter = "Json files (*.json)|*.json";
                     if (saveFileDialog.ShowDialog() == true)
                     {
                         UserSettingsPath = saveFileDialog.FileName;
+                        stream = saveFileDialog.OpenFile();
+                        stream.Close();
                         OutputConsole += $"Setting saved at: {UserSettingsPath}" + Environment.NewLine;
+                        ReadAndWriteJson.WriteAndSerializeAtStartup(new UserSettings(this), UserSettingsPath);
                     }
                 }
             }
@@ -206,9 +224,16 @@ namespace IfcComparison.ViewModels
 
         }
 
-        private void LoadUserSettings()
+        private void LoadUserSettings(string userSettingsPath = "")
         {
-            UserSettingsPath = Common.OpenFileDialogPath("json", "");
+            if (string.IsNullOrEmpty(userSettingsPath))
+            {
+                UserSettingsPath = Common.OpenFileDialogPath("json", "");
+            }
+            else
+            {
+                UserSettingsPath = userSettingsPath;
+            }
 
             if (!string.IsNullOrEmpty(UserSettingsPath))
             {
