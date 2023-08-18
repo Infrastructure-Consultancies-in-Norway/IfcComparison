@@ -74,8 +74,7 @@
     <ErrorReport>prompt</ErrorReport>
   </PropertyGroup>
   <PropertyGroup>
-    <ApplicationIcon>
-    </ApplicationIcon>
+    <ApplicationIcon>1200px-Logo_COWI.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Esent.Interop, Version=1.9.4.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
@@ -279,6 +278,9 @@
       <ProductName>.NET Framework 3.5 SP1</ProductName>
       <Install>false</Install>
     </BootstrapperPackage>
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="1200px-Logo_COWI.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

@@ -279,6 +279,13 @@ namespace IfcComparison.Models
                 var key = item.Key;
                 propsNew = item.Value.Item1;
                 propsOld = oldDict.ContainsKey(key) ? oldDict[key].Item1 : null;
+                  
+                /*
+                if (key.Value.ToString() == "A1-6")
+                {
+                    ;
+                }
+                */
 
                 ////////////////////////
                 /// FOR DEBUGGING
@@ -619,6 +626,14 @@ namespace IfcComparison.Models
                     var prop = GetIfcKey(pset, comparisonOperator, comparisonMethod);
                     if (prop != null)
                     {
+
+                        /*
+                        //DEBUG 
+                        if (prop.NominalValue.ToString() == "A1-6")
+                        {
+                            ;   
+                        }
+                        */
 
                         var relObj = rel.RelatedObjects.OfType<IIfcObject>().ToList();
                         relObj.RemoveAll(obj => !interfaceName.Contains(obj.GetType().Name));
