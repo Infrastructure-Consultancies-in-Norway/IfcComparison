@@ -26,6 +26,7 @@
             <RowDefinition Height="50"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="30"/>
+            <RowDefinition Height="30"/>
         </Grid.RowDefinitions>
 
 
@@ -36,6 +37,8 @@
         <Label Grid.Row="1" Grid.Column="3" Content="{Binding IsOldIFCLoaded}"/>
         <Label Grid.Row="2" Grid.Column="3" Content="{Binding IsNewIFCLoaded}"/>
         <Label Grid.Row="3" Grid.Column="3" Content="{Binding IsNewIFCQALoaded}"/>
+        
+        <TextBlock Grid.Row="7" Grid.Column="4" Margin="0 0 10 0" HorizontalAlignment="Right" Text="{Binding Version}"/>
 
         <TextBox Grid.Row="0" Grid.Column="1" Margin="5, 15, 205, 15" Grid.ColumnSpan="4" Text="{Binding UserSettingsPath}" />
         <TextBox Grid.Row="1" Grid.Column="1" Margin="5" Text="{Binding FilePathOldIFC}" />

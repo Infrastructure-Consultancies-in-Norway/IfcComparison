@@ -53,6 +53,9 @@ namespace IfcComparison.ViewModels
 
         private string mUserSettingsPath;
         public string UserSettingsPath { get => mUserSettingsPath; set => SetNotify(ref mUserSettingsPath, value); }
+
+        private string mVersion;
+        public string Version { get => mVersion; set => SetNotify(ref mVersion, value); }
         public Window SearchWindow { get; set; }
 
         public IfcStore OldModel { get; set; }
@@ -166,6 +169,11 @@ namespace IfcComparison.ViewModels
             IsOldIFCLoaded = "Not Loaded";
             IsNewIFCLoaded = "Not Loaded";
             IsNewIFCQALoaded = "Not Loaded";
+
+            //Add versioning to loaded assemblies
+            var versionString =  Assembly.GetExecutingAssembly().GetName().Version.ToString();
+            var appName = Assembly.GetExecutingAssembly().GetName().Name;
+            Version = $"{appName} Version: {versionString}";
 
             GetEntities();
 
