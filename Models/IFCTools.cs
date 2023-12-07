@@ -823,7 +823,7 @@ namespace IfcComparison.Models
                         .Where(n => n.Name.ToString() == comparisonOperator)
                         .FirstOrDefault();
                     return prop;
-                case nameof(ComparisonEnumeration.RegEx):
+                case nameof(ComparisonEnumeration.Regex):
                    prop = ifcProperties
                         .OfType<IIfcPropertySingleValue>()
                         .Where(n => Regex.Match(n.Name.ToString(), comparisonOperator).Success)
