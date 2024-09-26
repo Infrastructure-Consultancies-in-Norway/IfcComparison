@@ -11,6 +11,7 @@ namespace IfcComparison.Enumerations
         Contains = 1,
         Exact = 2,
         Identifier = 3,
+        Regex = 4
 
     }
 }
