@@ -8,20 +8,12 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices.ComTypes;
-using System.Security.Principal;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Xml.Linq;
-using Utilities;
-using Xbim.Common.Step21;
+using WpfUtilities.Utils;
 using Xbim.Ifc;
-using Xbim.Ifc4.Interfaces;
 
 namespace IfcComparison.ViewModels
 {
