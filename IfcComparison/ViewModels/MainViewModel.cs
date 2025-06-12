@@ -58,12 +58,12 @@ namespace IfcComparison.ViewModels
         private DataGridCellInfo mCurrentCell;
         public DataGridCellInfo CurrentCell { get => mCurrentCell; set => SetNotify(ref mCurrentCell, value); }
 
-        private IfcEntities mCurrentItem;
-        public IfcEntities CurrentItem { get => mCurrentItem; set => SetNotify(ref mCurrentItem, value); }
+        private IfcEntity mCurrentItem;
+        public IfcEntity CurrentItem { get => mCurrentItem; set => SetNotify(ref mCurrentItem, value); }
 
         public ObservableCollection<string> ComparisonMethodCol { get; set; } = new ObservableCollection<string>();// = Utils.StaticUtils.ComparisonList();
 
-        public ObservableCollection<IfcEntities> DataGridContentIFCEntities { get; set; } = new ObservableCollection<IfcEntities>();
+        public ObservableCollection<IfcEntity> DataGridContentIFCEntities { get; set; } = new ObservableCollection<IfcEntity>();
 
         //public ObservableCollection<string> ComparisonMethod { get; set; } = new ObservableCollection<string>();
 
@@ -253,7 +253,7 @@ namespace IfcComparison.ViewModels
                                 else
                                 {
                                     this.DataGridContentIFCEntities.Clear();
-                                    foreach (var item in (ICollection<IfcEntities>)uSetval)
+                                    foreach (var item in (ICollection<IfcEntity>)uSetval)
                                     {
                                         this.DataGridContentIFCEntities.Add(item);
                                     }

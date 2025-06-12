@@ -63,7 +63,7 @@ namespace IfcComparison
 
         }
 
-        private static ObservableCollection<string> AllIfcEntities()
+        public static ObservableCollection<string> AllIfcEntities()
         {
             var obsCol = new ObservableCollection<string>();
             foreach (Type type in IfcTools.IfcEntities)
@@ -92,9 +92,9 @@ namespace IfcComparison
                             {
                                 cell.IsEditing = true;
                             }
-                            var curObj = curCell.Item as IfcEntities;
-                            if (curObj == null) { curObj = new IfcEntities(); }
-                            if (SelectedItem != null){ curObj.IfcEntity = SelectedItem.ToString(); }
+                            var curObj = curCell.Item as IfcEntity;
+                            if (curObj == null) { curObj = new IfcEntity(); }
+                            if (SelectedItem != null){ curObj.Entity = SelectedItem.ToString(); }
                             cell.IsEditing = false;
                             cell.Focus();
                         }

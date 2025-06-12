@@ -154,21 +154,22 @@ namespace IfcComparison.Models
         /// </summary>
         /// <param name="interfaceName"></param>
         /// <returns></returns>
-        private static Type GetInterfaceType(string interfaceName)
+        public static Type GetInterfaceType(string interfaceName)
         {
-            Type interfaceType;
-            var interfaceTypes = IfcEntities
+            Type interfaceType = IfcEntities
                 .Where(n => n.Name == interfaceName)
                 .Where(n => n.FullName.Contains("Ifc4"))
                 .FirstOrDefault();
 
-            return interfaceType = interfaceTypes as Type;
+            return interfaceType;
 
         }
 
 
 
-        public static string CompareIFCPropertySets(IfcStore oldModel, IfcStore newModel, IfcStore newModelQA, string fileNameSaveAs, string transactionText, ObservableCollection<IfcEntities> ifcEntities)
+
+        /*
+        public static string CompareIFCPropertySets(IfcStore oldModel, IfcStore newModel, IfcStore newModelQA, string fileNameSaveAs, string transactionText, ObservableCollection<IfcEntities> ifcEntities, string SomeProp)
         {
             var output = "";
 
@@ -176,7 +177,7 @@ namespace IfcComparison.Models
             foreach (var entity in ifcEntities)
             {
                 var interfaceName = entity.IfcEntity;
-                var propSetName = entity.IfcPropertySet;
+                var propSetName = entity.IfcPropertySets;
                 var compOperator = entity.ComparisonOperator;
                 var compMethod = entity.ComparisonMethod;
                 
@@ -260,6 +261,36 @@ namespace IfcComparison.Models
             output += "Model Comparison finished!" + Environment.NewLine;
             return output;
         }
+
+        */
+
+        public static string CompareIFCPropertySets(IfcStore oldModel, IfcStore newModel, IfcStore newModelQA, string fileNameSaveAs, string transactionText, ObservableCollection<IfcEntity> ifcEntities)
+        {
+            var output = "";
+
+
+            foreach (IfcEntity entity in ifcEntities)
+            {
+                var ifcComparerer = new IfcComparer(oldModel,
+                                                   newModelQA,
+                                                   fileNameSaveAs,
+                                                   transactionText,
+                                                   entity);
+
+
+
+
+
+
+            }
+
+            newModelQA.SaveAs(fileNameSaveAs);
+
+            output += "Model Comparison finished!" + Environment.NewLine;
+            return output;
+        }
+
+
 
         private static string CompareIfcObjects<T>(Dictionary<IIfcValue, (List<IIfcProperty>, List<IIfcObject>)> oldDict, Dictionary<IIfcValue, (List<IIfcProperty>, List<IIfcObject>)> newDict, string pSetName, string compOperator, string compMethod, IfcStore model)
         {
@@ -718,6 +749,10 @@ namespace IfcComparison.Models
 
         }
 
+
+        
+
+
         private static Dictionary<IExpressValueType, List<IIfcProperty>> GetAllPropSetToDictId(string comparisonOperator, string comparisonMethod, string propSetName, List<IPersistEntity> instances)
         {
             var dict = new Dictionary<IExpressValueType, List<IIfcProperty>>();
@@ -890,6 +925,7 @@ namespace IfcComparison.Models
             }
 
         }
+
 
 
         /*

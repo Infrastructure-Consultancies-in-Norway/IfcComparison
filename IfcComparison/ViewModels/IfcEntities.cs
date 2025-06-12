@@ -10,10 +10,10 @@ using IfcComparison.Utils;
 namespace IfcComparison.ViewModels
 {
 
-    public class IfcEntities
+    public class IfcEntity
     {
-        public string IfcEntity { get; set; } 
-        public string IfcPropertySet { get; set; }
+        public string Entity { get; set; } 
+        public List<string> IfcPropertySets { get; set; }
         public string ComparisonOperator { get; set; }
         public string ComparisonMethod { get; set; }
 
