@@ -264,18 +264,15 @@ namespace IfcComparison.Models
 
         */
 
-        public static string CompareIFCPropertySets(IfcStore oldModel, IfcStore newModel, IfcStore newModelQA, string fileNameSaveAs, string transactionText, ObservableCollection<IfcEntity> ifcEntities)
+        public static async Task<string> CompareIFCPropertySets(IfcStore oldModel, IfcStore newModel, IfcStore newModelQA, string fileNameSaveAs, string transactionText, ObservableCollection<IfcEntity> ifcEntities)
         {
             var output = "";
 
 
             foreach (IfcEntity entity in ifcEntities)
             {
-                var ifcComparerer = new IfcComparer(oldModel,
-                                                   newModelQA,
-                                                   fileNameSaveAs,
-                                                   transactionText,
-                                                   entity);
+                var ifcComparerTask = IfcComparer.CreateAsync(oldModel, newModelQA, fileNameSaveAs, transactionText, entity);
+                var ifcComparer = await ifcComparerTask;
 
 
 

@@ -29,6 +29,7 @@ namespace IfcComparison.Models
                     .SelectMany(rel => rel.RelatedObjects)
                     .ToList();
 
+                // Get the target type from the ifcEntity string
                 var targetType = IfcTools.GetInterfaceType(_ifcEntity);
                 foreach (var relObj in relatedObjects)
                 {
@@ -38,7 +39,7 @@ namespace IfcComparison.Models
 
                     if (targetType != null)
                     {
-                        // Filter the related objects to find those that match the target type and are of type IIfcObject
+                        // Filter the related objects to find those that match the target type and are of type targetType
                         if (!targetType.IsInstanceOfType(relObj))
                             continue; // Skip if the object is not of the expected type
 
