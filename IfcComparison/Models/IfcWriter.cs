@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Xbim.Common.Step21;
 using Xbim.Ifc;
 
 namespace IfcComparison.Models
@@ -10,9 +11,15 @@ namespace IfcComparison.Models
     public class IfcWriter
     {
         public IfcComparerResult IfcComparisonResult { get; private set; }
-        public IfcWriter(IfcComparerResult ifcComparerResult) 
+        public XbimSchemaVersion IfcSchemaVersion { get; private set; }
+        public string FilePath { get; set; }
+
+
+        public IfcWriter(IfcComparerResult ifcComparerResult, XbimSchemaVersion xbimSchemaVersion, string filePath) 
         { 
             IfcComparisonResult = ifcComparerResult;
+            IfcSchemaVersion = xbimSchemaVersion;
+            FilePath = filePath;
         }
 
         public async Task<bool> WriteToFileAsync(IfcStore ifcModelQA)
@@ -23,6 +30,28 @@ namespace IfcComparison.Models
             {
                 try
                 {
+                    //using (var transaction = ifcModelQA.BeginTransaction("Save IFC Comparison Result"))
+                    {
+                        foreach (var ifcObj in IfcComparisonResult.ComparedIfcObjects)
+                        {
+
+                            var ifcObject = ifcObj.Key;
+                            var properties = ifcObj.Value;
+                            var pSetName = "QA_PSET";
+
+                            using (var trans = ifcModelQA.BeginTransaction("Add Property Set"))
+                            {
+
+                                IfcTools.GeneratePropertySetIfc(ifcModelQA, ifcObject, properties, pSetName, IfcSchemaVersion);
+                                trans.Commit();
+                            }
+                        }
+                        //transaction.Commit();
+                    }
+
+                    // Save the IfcStore to a file with the specified schema version
+                    ifcModelQA.SaveAs(FilePath);
+
                     // Save the IfcStore to a file
                     //ifcModelQA.SaveAs(IfcComparisonResult.FileNameSaveAs, Xbim.IO.IfcStorageType.Ifc, Xbim.IO.IfcStorageVersion.Ifc4X3);
                     isWritten = true;
@@ -36,6 +65,7 @@ namespace IfcComparison.Models
             });
 
         }
+
 
     }
 }

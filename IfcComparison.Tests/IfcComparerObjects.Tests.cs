@@ -13,7 +13,7 @@ namespace IfcComparison.Tests
         private static IfcStore OldIfcModel { get; set; }
         private static IfcStore NewIfcModel { get; set; }
 
-        private static List<string> _pSetToCheck = new List<string> { "SOS-KON_Armering", "SOS_Mengde" };
+        private static List<string> _pSetToCheck = new List<string> { "SOS-KON_Armering", "SOS-KON_Felles" };
 
         private static IfcEntity _entity = new IfcEntity() { ComparisonMethod = ComparisonEnumeration.Contains.ToString(), ComparisonOperator = "ARM.07", Entity = "IIfcReinforcingBar", IfcPropertySets = _pSetToCheck };
 
@@ -46,8 +46,10 @@ namespace IfcComparison.Tests
         {
             // Call the helper method to initialize the model
             var ifcFilePath = @"../../../IfcFiles/Nordstrand/SOS_05NOR_F_KON_OVERGANGSBRU_04C.ifc";
+            var ifcFilePathQA = @"../../../IfcFiles/Nordstrand/SOS_05NOR_F_KON_OVERGANGSBRU_04C_QA.ifc";
+            File.Copy(ifcFilePath, ifcFilePathQA, true); // Copy the file to avoid modifying the original
 
-            NewIfcModel = await Initialize_IfcModel(ifcFilePath);
+            NewIfcModel = await Initialize_IfcModel(ifcFilePathQA);
 
             Assert.NotNull(NewIfcModel);
 

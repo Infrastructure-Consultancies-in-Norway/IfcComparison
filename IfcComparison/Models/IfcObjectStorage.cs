@@ -10,10 +10,15 @@ namespace IfcComparison.Models
 {
     public class IfcObjectStorage
     {
-        public Dictionary<IfcGloballyUniqueId, (IIfcObject, IIfcPropertySet)> IfcObjects { get; private set; }
-        public IIfcPropertySet PropertySet { get; set; }
+        public Dictionary<IfcGloballyUniqueId, (IIfcObject, IIfcPropertySet)> IfcObjects { get; set; }
+        public string ComparisonId { get; set; }
+        //public IIfcPropertySet PropertySet { get; set; }
         private readonly IfcStore _ifcModel;
         private readonly string _ifcEntity;
+
+        public IfcObjectStorage()
+        {
+        }
 
         public IfcObjectStorage(IIfcPropertySet ifcPropertySet, IfcStore ifcModel, string ifcEntity)
         {
