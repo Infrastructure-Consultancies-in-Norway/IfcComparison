@@ -16,6 +16,7 @@ namespace IfcComparison.Tests
         private static List<string> _pSetToCheck = new List<string> { "SOS-KON_Armering", "SOS-KON_Felles" };
 
         private static IfcEntity _entity = new IfcEntity() { ComparisonMethod = ComparisonEnumeration.Contains.ToString(), ComparisonOperator = "ARM.07", Entity = "IIfcReinforcingBar", IfcPropertySets = _pSetToCheck };
+        private static IfcEntity _entity_Id = new IfcEntity() { ComparisonMethod = ComparisonEnumeration.Identifier.ToString(), ComparisonOperator = "", Entity = "IIfcReinforcingBar", IfcPropertySets = _pSetToCheck };
 
         // Initialize the IfcModel helper method before running tests
         public async Task<IfcStore> Initialize_IfcModel(string ifcFilePath)
@@ -86,6 +87,30 @@ namespace IfcComparison.Tests
             var filePathIfcQA = @"../../../IfcFiles/Nordstrand/SOS_05NOR_F_KON_OVERGANGSBRU_04C_QA.ifc";
 
             var ifcComparerTask = Models.IfcComparer.CreateAsync(OldIfcModel, NewIfcModel, filePathIfcQA, "Test Transaction", _entity);
+            var ifcComparer = await ifcComparerTask;
+
+            await ifcComparer.CompareRevisions(); // Ensure the task completes before proceeding
+
+
+
+        }
+
+        [Fact]
+        public async Task Initialize_IfcComparer_Identifier()
+        {
+            if (OldIfcModel == null || NewIfcModel == null)
+            {
+                // Initialize the models if they haven't been done yet
+                var task = Task.WhenAll(
+                    Initialize_OldIfcModel(),
+                    Initialize_NewIfcModel()
+                );
+                await task; // Wait for both initializations to complete
+            }
+
+            var filePathIfcQA = @"../../../IfcFiles/Nordstrand/SOS_05NOR_F_KON_OVERGANGSBRU_04C_QA.ifc";
+
+            var ifcComparerTask = Models.IfcComparer.CreateAsync(OldIfcModel, NewIfcModel, filePathIfcQA, "Test Transaction", _entity_Id);
             var ifcComparer = await ifcComparerTask;
 
             await ifcComparer.CompareRevisions(); // Ensure the task completes before proceeding

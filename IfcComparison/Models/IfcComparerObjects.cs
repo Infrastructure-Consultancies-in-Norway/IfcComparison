@@ -12,14 +12,14 @@ namespace IfcComparison.Models
     {
         public IfcStore IfcComparerModel { get; }
         public IfcEntity Entity { get; }
-        public List<IfcObjectStorage> IfcObjects { get; private set; }
+        public List<IfcObjectStorage> IfcStorageObjects { get; private set; } = new List<IfcObjectStorage>();
 
         // Private constructor to support the factory pattern
         private IfcComparerObjects(IfcStore ifcModel, IfcEntity entity)
         {
             IfcComparerModel = ifcModel;
             Entity = entity;
-            IfcObjects = new List<IfcObjectStorage>();
+            //IfcStorageObjects = new List<IfcObjectStorage>();
         }
 
         // Async factory method to create and initialize an instance
@@ -46,11 +46,11 @@ namespace IfcComparison.Models
             foreach (var propertySet in filteredPropertySets)
             {
                 // Create a new IfcObjectStorage for each property set and add it to the list
-                var ifcObjectStorage = new IfcObjectStorage(propertySet, IfcComparerModel, Entity.Entity);
+                var ifcObjectStorage = new IfcObjectStorage(propertySet, IfcComparerModel, Entity);
 
                 // Check if the IfcObjectStorage is not null before adding it to the list
                 if (ifcObjectStorage != null && ifcObjectStorage.IfcObjects.Count > 0)
-                    IfcObjects.Add(ifcObjectStorage);
+                    IfcStorageObjects.Add(ifcObjectStorage);
             }
 
             // Add a small delay to ensure this is truly async since the method is async

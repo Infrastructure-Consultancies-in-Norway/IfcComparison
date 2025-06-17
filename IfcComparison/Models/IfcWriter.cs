@@ -30,7 +30,7 @@ namespace IfcComparison.Models
             {
                 try
                 {
-                    //using (var transaction = ifcModelQA.BeginTransaction("Save IFC Comparison Result"))
+                    using (var transaction = ifcModelQA.BeginTransaction("Save IFC Comparison Result"))
                     {
                         foreach (var ifcObj in IfcComparisonResult.ComparedIfcObjects)
                         {
@@ -39,14 +39,14 @@ namespace IfcComparison.Models
                             var properties = ifcObj.Value;
                             var pSetName = "QA_PSET";
 
-                            using (var trans = ifcModelQA.BeginTransaction("Add Property Set"))
+                            //using (var trans = ifcModelQA.BeginTransaction("Add Property Set"))
                             {
 
                                 IfcTools.GeneratePropertySetIfc(ifcModelQA, ifcObject, properties, pSetName, IfcSchemaVersion);
-                                trans.Commit();
+                                //trans.Commit();
                             }
                         }
-                        //transaction.Commit();
+                        transaction.Commit();
                     }
 
                     // Save the IfcStore to a file with the specified schema version

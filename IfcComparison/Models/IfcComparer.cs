@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Xbim.Common;
 using Xbim.Common.Step21;
 using Xbim.Ifc;
+using Xbim.Ifc2x3.Kernel;
 using Xbim.Ifc4.Interfaces;
 using Xbim.Ifc4.Kernel;
 using Xbim.Ifc4.MeasureResource;
@@ -80,12 +81,9 @@ namespace IfcComparison.Models
             switch (Entity.ComparisonMethod)
             {
                 case nameof(ComparisonEnumeration.Identifier):
-                    await CompareByIdentifier();
-                    break;
-                // Serves as a OR operator for Contains and Exact calling the same method
                 case nameof(ComparisonEnumeration.Contains):
                 case nameof(ComparisonEnumeration.Exact):
-                    await CompareByProperty();
+                    await Compare();
                     break;
                 default:
                     throw new NotSupportedException($"Comparison method '{Entity.ComparisonMethod}' is not supported.");
@@ -105,20 +103,21 @@ namespace IfcComparison.Models
         }
 
 
-        private async Task CompareByProperty()
+        private async Task Compare()
         {
             var ifcComparerResult = new IfcComparerResult();
 
             // Get the comparison operator from the entity
             var comparisonOperator = Entity.ComparisonOperator;
+            // Specify the type explicitly for Enum.Parse
+            var comparisonMethod = Enum.Parse<ComparisonEnumeration>(Entity.ComparisonMethod);
 
             // Run the comparison tasks in parallel
-            var oldObjectsNotInNew = CheckIfIfcObjectsAreInIfcObjects(OldObjects, NewObjects, comparisonOperator);
-            var newObjectsNotInOld = CheckIfIfcObjectsAreInIfcObjects(NewObjects, OldObjects, comparisonOperator);
-
+            var oldObjectsNotInNew = CheckIfIfcObjectsAreInIfcObjects(OldObjects, NewObjects, comparisonOperator, comparisonMethod);
+            var newObjectsNotInOld = CheckIfIfcObjectsAreInIfcObjects(NewObjects, OldObjects, comparisonOperator, comparisonMethod);
 
             // First we will check the
-            var propertyCompareResult = PropertyCompare(NewObjects, OldObjects, comparisonOperator);
+            var propertyCompareResult = PropertyCompare(NewObjects, OldObjects, comparisonOperator, comparisonMethod);
 
             // Wait for tasks to complete
             await Task.WhenAll(oldObjectsNotInNew, newObjectsNotInOld, propertyCompareResult);
@@ -139,59 +138,139 @@ namespace IfcComparison.Models
             await Task.Delay(1); // Simulate async operation, replace with actual comparison logic
         }
 
-        private async Task<Dictionary<IIfcObject, Dictionary<string, string>>> PropertyCompare(IfcComparerObjects newObjects, IfcComparerObjects oldObjects, string comparisonOperator)
+        private async Task<Dictionary<IIfcObject, Dictionary<string, string>>> PropertyCompare(IfcComparerObjects newObjects, IfcComparerObjects oldObjects, string comparisonOperator, ComparisonEnumeration comparisonEnumeration)
         {
             var result = new Dictionary<IIfcObject, Dictionary<string, string>>();
 
-            foreach (var newObject in newObjects.IfcObjects)
+            if (comparisonEnumeration != ComparisonEnumeration.Identifier)
             {
-                // result
-
-                //var isComopared = false;
-                var newIdNomValue = GetPropertyNominalValue(comparisonOperator, newObject);
-
-                // Use the nominal value to compare with the the Old
-                foreach (var oldObject in oldObjects.IfcObjects)
+                // Create lookup dictionaries to avoid nested loops
+                var oldObjectLookup = new Dictionary<string, List<KeyValuePair<IIfcObject, string>>>();
+                
+                // Step 1: Build a lookup for old objects based on comparison value
+                foreach (var oldObject in oldObjects.IfcStorageObjects)
                 {
-                    var oldIdNomValue = GetPropertyNominalValue(comparisonOperator, oldObject);
-                    // Compare the nominal values based on the comparison operator
-                    if (newIdNomValue == oldIdNomValue)
+                    foreach (var oldIfcObj in oldObject.IfcObjects)
                     {
-                        // Do the property comparison logic and assigne the result
-                        // to a new propertySet in the newModelQA
-
-                        // Get the newropertySet from the newObject
-                        var newPropertySet = newObject.IfcObjects.Values.FirstOrDefault().Item2.HasProperties;
-                        // Get the oldPropertySet from the oldObject
-                        var oldPropertySet = oldObject.IfcObjects.Values.FirstOrDefault().Item2.HasProperties;
-
-                        // Create a new property set in the newModelQA
-                        var propsertySetResult = CompareQAPropertySets(newPropertySet, oldPropertySet);
-
-                        // Add the result to the dictionary
-                        foreach (var ifcObj in newObject.IfcObjects)
+                        var oldIdNomValue = IfcTools.GetComparisonNominalValue(oldIfcObj.Value, comparisonOperator);
+                        if (!string.IsNullOrEmpty(oldIdNomValue))
                         {
-                            // Check if the IfcObject already exists in the result dictionary
-                            if (!result.ContainsKey(ifcObj.Value.Item1))
-                            {
-                                // If not, create a new entry with the IfcObject and an empty dictionary
-                                result[ifcObj.Value.Item1] = propsertySetResult;
-                            }
-                            else
-                            {
-                                // Log the fact that the object already exists
-                                // Have to implement a logging mechanism if later
-                            }
-
+                            if (!oldObjectLookup.ContainsKey(oldIdNomValue))
+                                oldObjectLookup[oldIdNomValue] = new List<KeyValuePair<IIfcObject, string>>();
+                            
+                            oldObjectLookup[oldIdNomValue].Add(new KeyValuePair<IIfcObject, string>(oldIfcObj.Value, oldIdNomValue));
                         }
                     }
                 }
 
+                // Step 2: Process new objects and compare with old ones using the lookup
+                foreach (var newObject in newObjects.IfcStorageObjects)
+                {
+                    foreach (var newIfcObj in newObject.IfcObjects)
+                    {
+                        var newIdNomValue = IfcTools.GetComparisonNominalValue(newIfcObj.Value, comparisonOperator);
+                        
+                        // Skip if no nominal value found
+                        if (string.IsNullOrEmpty(newIdNomValue))
+                            continue;
+                        
+                        // Check if we have matching old objects
+                        if (oldObjectLookup.TryGetValue(newIdNomValue, out var oldMatches))
+                        {
+                            var newPsets = IfcTools.GetPropertySetsFromObject(newIfcObj.Value, Entity.IfcPropertySets);
+                            
+                            foreach (var oldMatch in oldMatches)
+                            {
+                                var oldPsets = IfcTools.GetPropertySetsFromObject(oldMatch.Key, Entity.IfcPropertySets);
+                                
+                                // Compare property sets between new and old objects
+                                CompareAndAddPropertySets(newIfcObj.Value, newPsets, oldPsets, result);
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // For Identifier comparison, we'll use the GlobalId directly
+
+                // Step 1: Build a lookup dictionary of old objects by their GlobalIds
+                var oldObjectLookup = new Dictionary<string, IIfcObject>();
+
+                foreach (var oldObject in oldObjects.IfcStorageObjects)
+                {
+                    foreach (var oldIfcObj in oldObject.IfcObjects)
+                    {
+                        // Use the GlobalId string as the key
+                        if (!oldObjectLookup.ContainsKey(oldIfcObj.Key))
+                        {
+                            oldObjectLookup[oldIfcObj.Key] = oldIfcObj.Value;
+                        }
+                    }
+                }
+
+                // Step 2: Process new objects and compare with old ones using GlobalId
+                foreach (var newObject in newObjects.IfcStorageObjects)
+                {
+                    foreach (var newIfcObj in newObject.IfcObjects)
+                    {
+                        // Get the GlobalId string value
+                        string globalId = newIfcObj.Key;
+
+                        // Check if this GlobalId exists in the old objects
+                        if (oldObjectLookup.TryGetValue(globalId, out var matchingOldObject))
+                        {
+                            // We have a match by GlobalId
+                            var newPsets = IfcTools.GetPropertySetsFromObject(newIfcObj.Value, Entity.IfcPropertySets);
+                            var oldPsets = IfcTools.GetPropertySetsFromObject(matchingOldObject, Entity.IfcPropertySets);
+
+                            // Compare property sets between the new and old objects
+                            CompareAndAddPropertySets(newIfcObj.Value, newPsets, oldPsets, result);
+                        }
+                    }
+                }
             }
 
-            await Task.Delay(1); // Simulate async operation, replace with actual comparison logic
-            return result;
 
+
+            await Task.Delay(1); // Simulate async operation
+            return result;
+        }
+
+        // Helper method to compare and add property sets
+        private void CompareAndAddPropertySets(
+            IIfcObject newIfcObj,
+            List<IIfcPropertySet> newPsets,
+            List<IIfcPropertySet> oldPsets,
+            Dictionary<IIfcObject, Dictionary<string, string>> result)
+        {
+            foreach (var newPset in newPsets)
+            {
+                var oldPset = oldPsets.FirstOrDefault(p => p.Name == newPset.Name);
+                if (oldPset == null)
+                    continue;
+
+                // Compare the property sets
+                var propertySetResult = CompareQAPropertySets(newPset.HasProperties, oldPset.HasProperties);
+                
+                // Add or merge into result
+                if (!result.ContainsKey(newIfcObj))
+                {
+                    result[newIfcObj] = propertySetResult;
+                }
+                else
+                {
+                    var existingProperties = result[newIfcObj];
+                    
+                    foreach (var kvp in propertySetResult)
+                    {
+                        if (!existingProperties.ContainsKey(kvp.Key))
+                        {
+                            existingProperties[kvp.Key] = kvp.Value;
+                        }
+                    }
+                }
+            }
         }
 
         private Dictionary<string, string> CompareQAPropertySets(IItemSet<IIfcProperty> newPropertySet, IItemSet<IIfcProperty> oldPropertySet)
@@ -255,19 +334,10 @@ namespace IfcComparison.Models
 
         }
 
+
         private static string GetPropertyNominalValue(string comparisonOperator, IfcObjectStorage newObject)
         {
-            // Get the nominal value of the property set based on the comparison operator
-            var dictValue = newObject.IfcObjects.Values
-                .FirstOrDefault(val => val.Item2.HasProperties.Any(prop => prop.Name.ToString().Contains(comparisonOperator)));
-
-            // Check if the dictValue is null or empty
-            if (dictValue == default || dictValue.Item2 == null || !dictValue.Item2.HasProperties.Any())
-            {
-                return string.Empty; // Return empty string if no properties found
-            }
-
-            var idValue = (IIfcPropertySingleValue)dictValue.Item2.HasProperties.FirstOrDefault(prop => prop.Name.ToString().Contains(comparisonOperator));
+            var idValue = (IIfcPropertySingleValue)newObject.PropertySet.HasProperties.FirstOrDefault(prop => prop.Name.ToString().Contains(comparisonOperator));
             var idNomValue = idValue?.NominalValue?.ToString() ?? string.Empty;
             return idNomValue;
         }
@@ -280,52 +350,68 @@ namespace IfcComparison.Models
         /// <param name="newObjects"></param>
         /// <param name="comparisonOperator"></param>
         /// <returns></returns>
-        private async Task<List<IfcObjectStorage>> CheckIfIfcObjectsAreInIfcObjects(IfcComparerObjects oldObjects, IfcComparerObjects newObjects, string comparisonOperator)
+        private async Task<List<IfcObjectStorage>> CheckIfIfcObjectsAreInIfcObjects(IfcComparerObjects oldObjects, IfcComparerObjects newObjects, string comparisonOperator, ComparisonEnumeration comparisonEnumeration)
         {
             var result = new List<IfcObjectStorage>();
 
-            foreach (var oldObject in oldObjects.IfcObjects)
+            if (comparisonEnumeration != ComparisonEnumeration.Identifier)
             {
-                var oldIdNomValue = GetPropertyNominalValue(comparisonOperator, oldObject);
-
-                bool shouldAdd = true;
-                foreach (var newObject in newObjects.IfcObjects)
+                foreach (var oldObject in oldObjects.IfcStorageObjects)
                 {
-                    var newIdNomValue = GetPropertyNominalValue(comparisonOperator, newObject);
+                    var oldIdNomValue = GetPropertyNominalValue(comparisonOperator, oldObject);
 
-                    // Compare the old and new objects based on the comparison operator
-                    if (oldIdNomValue == newIdNomValue)
+                    bool shouldAdd = true;
+                    foreach (var newObject in newObjects.IfcStorageObjects)
                     {
-                        // If they match we proceed to next object since we only want to find objects that are not in the other list
-                        shouldAdd = false;
-                        continue;
+                        var newIdNomValue = GetPropertyNominalValue(comparisonOperator, newObject);
+
+                        // Compare the old and new objects based on the comparison operator
+                        if (oldIdNomValue == newIdNomValue)
+                        {
+                            // If they match we proceed to next object since we only want to find objects that are not in the other list
+                            shouldAdd = false;
+                            continue;
+                        }
+                    }
+                    if (shouldAdd)
+                    {
+                        result.Add(oldObject);
                     }
                 }
-                if (shouldAdd)
+            }
+            else
+            {
+                // For Identifier comparison, we don't use nominal values
+                foreach (var oldObject in oldObjects.IfcStorageObjects)
                 {
-                    result.Add(oldObject);
+                    var oldIdNomValues = oldObject.IfcObjects.Keys; // For Identifier comparison, we don't use nominal values
+                    bool shouldAdd = true;
+                    foreach (var newObject in newObjects.IfcStorageObjects)
+                    {
+                        var newIdNomValues = newObject.IfcObjects.Keys; // For Identifier comparison, we don't use nominal values
+                        // Compare the old and new objects based on the comparison operator
+                        if (oldIdNomValues.Intersect(newIdNomValues).Any())
+                        {
+                            // If they match we proceed to next object since we only want to find objects that are not in the other list
+                            shouldAdd = false;
+                            continue;
+                        }
+                    }
+                    if (shouldAdd)
+                    {
+                        result.Add(oldObject);
+                    }
                 }
             }
+
+
 
             await Task.Delay(1); // Simulate async operation, replace with actual comparison logic
             return result;
 
         }
 
-        private async Task<IfcComparerResult> CompareByIdentifier()
-        {
-            var ifcComparerResult = new IfcComparerResult();
 
-
-
-
-
-            // Placeholder for comparison logic by identifier
-            // Implement the logic based on your requirements
-            await Task.Delay(1); // Simulate async operation, replace with actual comparison logic
-            return ifcComparerResult;
-
-        }
 
 
 

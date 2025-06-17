@@ -25,6 +25,7 @@ using Xbim.Ifc4.MeasureResource;
 using Xbim.Ifc4.PropertyResource;
 using Xbim.Ifc4.UtilityResource;
 using Xbim.IO.Esent;
+using Xbim.IO.Xml.BsConf;
 
 
 namespace IfcComparison.Models
@@ -938,6 +939,47 @@ namespace IfcComparison.Models
             return returnProp;
         }
 
+        public static List<IIfcPropertySet> GetPropertySetsFromObject(IIfcObject ifcObject, List<string> pSetNames)
+        {
+            // Get all property sets from the new object
+            var newPropertySet = ifcObject
+                .IsDefinedBy.OfType<IIfcRelDefinesByProperties>()
+                .SelectMany(rel => rel.RelatingPropertyDefinition.PropertySetDefinitions)
+                .OfType<IIfcPropertySet>();
+
+            // Get the property sets given in the entity
+            var newPropertySetFiltered = newPropertySet
+                .Where(ps => pSetNames.Contains(ps.Name.ToString(), StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            return newPropertySetFiltered;
+
+        }
+
+
+        public static string GetComparisonNominalValue(IIfcObject ifcObject, string compOperator)
+        {
+            var result = string.Empty;
+
+            // Get all PropertySet on the object
+            var objPsets = ifcObject.IsDefinedBy.OfType<IIfcRelDefinesByProperties>()
+                .SelectMany(rel => rel.RelatingPropertyDefinition.PropertySetDefinitions)
+                .OfType<IIfcPropertySet>();
+
+            // Loop through all properties in the PropertySets and check if the name contains the ComparisonOperator and return the first nominal value found.
+            var propertyNomVal = objPsets
+                .SelectMany(ps => ps.HasProperties)
+                .Where(prop => prop is IIfcPropertySingleValue)
+                .Cast<IIfcPropertySingleValue>()
+                .FirstOrDefault(prop => prop.Name.ToString().Contains(compOperator));
+
+            if (!string.IsNullOrEmpty(propertyNomVal?.NominalValue.ToString()))
+            {
+                result = propertyNomVal.NominalValue.ToString();
+            }
+
+            return result;
+        }
 
         private static void CreateQAPropSet(IfcStore model, List<IPersistEntity> instances, string newPropSetName, string propSetName)
         {
