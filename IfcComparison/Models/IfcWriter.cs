@@ -22,7 +22,7 @@ namespace IfcComparison.Models
             FilePath = filePath;
         }
 
-        public async Task<bool> WriteToFileAsync(IfcStore ifcModelQA)
+        public async Task<bool> WriteToFileAsync(IfcStore ifcModelQA, string pSetName)
         {
             bool isWritten = false;
 
@@ -37,7 +37,7 @@ namespace IfcComparison.Models
 
                             var ifcObject = ifcObj.Key;
                             var properties = ifcObj.Value;
-                            var pSetName = "QA_PSET";
+                            //var pSetName = "QA_PSET";
 
                             //using (var trans = ifcModelQA.BeginTransaction("Add Property Set"))
                             {

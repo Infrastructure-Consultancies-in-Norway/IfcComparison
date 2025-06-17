@@ -1,0 +1,37 @@
+{
+  "FilePathOldIFC": "",
+  "FilePathNewIFC": "",
+  "FilePathIFCToQA": "",
+  "DataGridContentIFCEntities": [
+    {
+      "IfcEntity": "IIfcReinforcingBar",
+      "IfcPropertySet": "MERKNADER",
+      "ComparisonOperator": "K200",
+      "ComparisonMethod": "Contains"
+    },
+    {
+      "IfcEntity": "IIfcBuildingElementProxy",
+      "IfcPropertySet": "MERKNADER",
+      "ComparisonOperator": "K001",
+      "ComparisonMethod": "Contains"
+    },
+    {
+      "IfcEntity": "IIfcBeam",
+      "IfcPropertySet": "MERKNADER",
+      "ComparisonOperator": "K001",
+      "ComparisonMethod": "Contains"
+    },
+    {
+      "IfcEntity": "IIfcMember",
+      "IfcPropertySet": "MERKNADER",
+      "ComparisonOperator": "K001",
+      "ComparisonMethod": "Contains"
+    },
+    {
+      "IfcEntity": "IIfcPlate",
+      "IfcPropertySet": "MERKNADER",
+      "ComparisonOperator": "K001",
+      "ComparisonMethod": "Contains"
+    }
+  ]
+}

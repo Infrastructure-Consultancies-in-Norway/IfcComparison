@@ -14,6 +14,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using WpfUtilities.Utils;
 using Xbim.Ifc;
+using Xbim.IO.Xml.BsConf;
 
 namespace IfcComparison.ViewModels
 {
@@ -404,8 +405,19 @@ namespace IfcComparison.ViewModels
                     {
                         if (IsOldIFCLoaded == "Loaded" && IsNewIFCQALoaded == "Loaded")
                         {
-                            OutputConsole += "IFC Comparison running..." + Environment.NewLine;
-                            OutputConsole += await Task.Run(() => IfcTools.CompareIFCPropertySets(OldModel, NewModel, NewModelQA , FilePathIFCToQA, "Transaction", DataGridContentIFCEntities));
+                            //OutputConsole += "IFC Comparison running..." + Environment.NewLine;
+                            //OutputConsole += await Task.Run(() => IfcTools.CompareIFCPropertySets(OldModel, NewModel, NewModelQA , FilePathIFCToQA, "Transaction", DataGridContentIFCEntities));
+
+                            foreach (var entity in DataGridContentIFCEntities)
+                            {
+                                var ifcComparerTask = Models.IfcComparer.CreateAsync(OldModel, NewModelQA, FilePathIFCToQA, "Transaction", entity);
+                                var ifcComparer = await ifcComparerTask;
+
+                                await ifcComparer.CompareRevisions(); // Ensure the task completes before proceeding
+
+
+                            }
+
                         }
                         else
                         {

@@ -4,34 +4,40 @@
   "FilePathIFCToQA": "",
   "DataGridContentIFCEntities": [
     {
-      "IfcEntity": "IIfcReinforcingBar",
-      "IfcPropertySet": "MERKNADER",
+      "PSetName": "QA_REBAR",
+      "Entity": "IIfcReinforcingBar",
+      "IfcPropertySets": [ "MERKNADER" ],
       "ComparisonOperator": "K200",
       "ComparisonMethod": "Contains"
     },
     {
-      "IfcEntity": "IIfcBuildingElementProxy",
-      "IfcPropertySet": "MERKNADER",
+      "PSetName": "QA_PROXY",
+      "Entity": "IIfcBuildingElementProxy",
+      "IfcPropertySets": [ "MERKNADER" ],
       "ComparisonOperator": "K001",
       "ComparisonMethod": "Contains"
     },
     {
-      "IfcEntity": "IIfcBeam",
-      "IfcPropertySet": "MERKNADER",
+      "PSetName": "QA_PSET",
+      "Entity": "IIfcBeam",
+      "IfcPropertySets": [ "MERKNADER" ],
       "ComparisonOperator": "K001",
       "ComparisonMethod": "Contains"
     },
     {
-      "IfcEntity": "IIfcMember",
-      "IfcPropertySet": "MERKNADER",
-      "ComparisonOperator": "K001",
+      "PSetName": "QA_PSET",
+      "Entity": "IIfcReinforcingBar",
+      "IfcPropertySets": [ "SOS-KON_Armering", "SOS-KON_Felles" ],
+      "ComparisonOperator": "ARM.07",
       "ComparisonMethod": "Contains"
     },
     {
-      "IfcEntity": "IIfcPlate",
-      "IfcPropertySet": "MERKNADER",
-      "ComparisonOperator": "K001",
+      "PSetName": "QA_PSET",
+      "Entity": "IIfcReinforcingBar",
+      "IfcPropertySets": [ "KON_Armering", "KON_Felles" ],
+      "ComparisonOperator": "ARM.07",
       "ComparisonMethod": "Contains"
     }
+
   ]
 }

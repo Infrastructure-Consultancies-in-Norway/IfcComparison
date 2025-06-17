@@ -96,7 +96,7 @@ namespace IfcComparison.Models
 
             if (IfcWriter != null)
             {
-                await Task.Run(() => IfcWriter.WriteToFileAsync(NewModelQA)); // Call the IfcWriter to write the results to a file asynchronously
+                await Task.Run(() => IfcWriter.WriteToFileAsync(NewModelQA, Entity.PSetName)); // Call the IfcWriter to write the results to a file asynchronously
             }
 
 

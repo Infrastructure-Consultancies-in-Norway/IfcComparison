@@ -12,6 +12,7 @@ namespace IfcComparison.ViewModels
 
     public class IfcEntity
     {
+        public string PSetName { get; set; } = "QA_PSET";
         public string Entity { get; set; } 
         public List<string> IfcPropertySets { get; set; }
         public string ComparisonOperator { get; set; }
