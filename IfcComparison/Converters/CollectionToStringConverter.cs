@@ -9,8 +9,21 @@ namespace IfcComparison.Converters
 {
     public class CollectionToStringConverter : IValueConverter
     {
+        // Keep track of objects currently being edited
+        public static Dictionary<object, string> EditingCache = new Dictionary<object, string>();
+        public static object CurrentlyEditedObject = null;
+        public static bool IsEditing = false;
+        
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
+            // If we're editing this specific object, return the cached value
+            if (IsEditing && CurrentlyEditedObject != null && 
+                value is IEnumerable<string> && EditingCache.ContainsKey(CurrentlyEditedObject))
+            {
+                return EditingCache[CurrentlyEditedObject];
+            }
+            
+            // Normal conversion for display
             if (value is IEnumerable<string> collection)
             {
                 return string.Join(", ", collection);
@@ -21,16 +34,45 @@ namespace IfcComparison.Converters
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is string stringValue && !string.IsNullOrWhiteSpace(stringValue))
+            string stringValue = value as string;
+            
+            // During active editing, just store the text
+            if (IsEditing && CurrentlyEditedObject != null)
             {
-                // Don't split by comma during editing, only when focus is lost
-                if (parameter is bool isEditing && isEditing)
-                    return value;
+                EditingCache[CurrentlyEditedObject] = stringValue ?? string.Empty;
                 
-                return stringValue.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+                // Use the existing collection or create a new one when editing
+                return new List<string>(); // Return empty placeholder during editing
+            }
+            
+            // When editing is complete, split by commas
+            if (!string.IsNullOrWhiteSpace(stringValue))
+            {
+                return stringValue.Split(',')
+                    .Select(s => s.Trim())
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .ToList();
             }
             
             return new List<string>();
         }
+
+        // Helper method for finishing edit
+        //public static List<string> FinalizeEdit(object dataContext, TextBox textBox)
+        //{
+        //    if (dataContext != null && textBox != null)
+        //    {
+        //        string text = textBox.Text;
+        //        if (!string.IsNullOrWhiteSpace(text))
+        //        {
+        //            return text.Split(',')
+        //                .Select(s => s.Trim())
+        //                .Where(s => !string.IsNullOrWhiteSpace(s))
+        //                .ToList();
+        //        }
+        //    }
+            
+        //    return new List<string>();
+        //}
     }
 }
