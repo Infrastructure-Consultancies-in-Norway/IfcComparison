@@ -26,59 +26,128 @@ namespace IfcComparison.Models
         public IfcStore NewModelQA { get; }
         public string FileNameSaveAs { get; }
         public string TransactionText { get; }
-        public IfcEntity Entity { get; }
+        public List<IfcEntity> Entities { get; }
         public IfcComparerResult IfcComparisonResult { get; private set; } = new IfcComparerResult();
         public IfcWriter IfcWriter { get; set; }
+        private Dictionary<IIfcObject, Dictionary<string, string>> AllComparedObjects { get; set; } = new Dictionary<IIfcObject, Dictionary<string, string>>();
 
         // Private constructor for the factory method
-        private IfcComparer(IfcStore oldModel, IfcStore newModelQA, string fileNameSaveAs, string transactionText, IfcEntity entity)
+        private IfcComparer(IfcStore oldModel, IfcStore newModelQA, string fileNameSaveAs, string transactionText, List<IfcEntity> entities)
         {
             OldModel = oldModel;
             NewModelQA = newModelQA;
             FileNameSaveAs = fileNameSaveAs;
             TransactionText = transactionText;
-            Entity = entity;
+            Entities = entities;
         }
 
-        // Public async factory method
-        public static async Task<IfcComparer> CreateAsync(IfcStore oldModel, IfcStore newModelQA, string fileNameSaveAs, string transactionText, IfcEntity entity)
+        // Public async factory method with List<IfcEntity>
+        public static async Task<IfcComparer> CreateAsync(IfcStore oldModel, IfcStore newModelQA, string fileNameSaveAs, string transactionText, List<IfcEntity> entities)
         {
-            var instance = new IfcComparer(oldModel, newModelQA, fileNameSaveAs, transactionText, entity);
+            var instance = new IfcComparer(oldModel, newModelQA, fileNameSaveAs, transactionText, entities);
             await instance.InitializeAsync();
             return instance;
         }
 
         private async Task InitializeAsync()
         {
-            // Start both initializations in parallel
-            var oldObjectsTask = IfcComparerObjects.CreateAsync(OldModel, Entity);
-            var newObjectsTask = IfcComparerObjects.CreateAsync(NewModelQA, Entity);
-
-            // Wait for both to complete
-            await Task.WhenAll(oldObjectsTask, newObjectsTask);
-
-            // Assign the results
-            OldObjects = await oldObjectsTask;
-            NewObjects = await newObjectsTask;
+            // No need to initialize all entity objects at once
+            // They will be processed one by one in CompareAllRevisions
         }
 
-        // Method to compare the old and new objects based on the entity's comparison method and operator
-        public async Task CompareRevisions()
+        // New method to process all entities in the list
+        public async Task CompareAllRevisions()
         {
+            if (Entities == null || !Entities.Any())
+            {
+                throw new InvalidOperationException("No entities provided for comparison.");
+            }
 
+            // Create combined result object
+            var combinedResult = new IfcComparerResult
+            {
+                OldObjectsNotInNew = new List<IfcObjectStorage>(),
+                NewObjectsNotInOld = new List<IfcObjectStorage>(),
+                ComparedIfcObjects = new Dictionary<IIfcObject, Dictionary<string, string>>()
+            };
+
+            // Process each entity
+            foreach (var entity in Entities)
+            {
+                // Initialize objects for this specific entity
+                var oldObjects = await IfcComparerObjects.CreateAsync(OldModel, entity);
+                var newObjects = await IfcComparerObjects.CreateAsync(NewModelQA, entity);
+
+                // Create a temp IfcComparer for this entity to reuse existing comparison logic
+                var tempComparer = new IfcComparer(OldModel, NewModelQA, FileNameSaveAs, TransactionText, new List<IfcEntity> { entity })
+                {
+                    OldObjects = oldObjects,
+                    NewObjects = newObjects
+                };
+
+                // Process this entity
+                await tempComparer.CompareEntityInternal();
+
+                // Combine the results
+                combinedResult.OldObjectsNotInNew.AddRange(tempComparer.IfcComparisonResult.OldObjectsNotInNew ?? new List<IfcObjectStorage>());
+                combinedResult.NewObjectsNotInOld.AddRange(tempComparer.IfcComparisonResult.NewObjectsNotInOld ?? new List<IfcObjectStorage>());
+
+                // Merge the compared objects dictionaries
+                foreach (var kvp in tempComparer.IfcComparisonResult.ComparedIfcObjects ?? new Dictionary<IIfcObject, Dictionary<string, string>>())
+                {
+                    combinedResult.ComparedIfcObjects[kvp.Key] = kvp.Value;
+                }
+            }
+
+            // Store the combined results
+            IfcComparisonResult = combinedResult;
+
+            // Set up the IfcWriter with combined results
+            IfcWriter = new IfcWriter(IfcComparisonResult, NewModelQA.SchemaVersion, FileNameSaveAs);
+
+            // Now write all results to file once
+            if (Entities.Any())
+            {
+                // Create a dictionary to map objects to their appropriate PSetNames
+                var objectPSetMap = new Dictionary<Xbim.Ifc4.Interfaces.IIfcObject, string>();
+
+                // Create combined results with proper PSetName mapping
+                foreach (var entity in Entities)
+                {
+                    // Find objects related to this entity type
+                    var entityObjects = IfcComparisonResult.ComparedIfcObjects
+                        .Where(kvp => kvp.Key.GetType().GetInterfaces().Any(i => i.Name == entity.Entity))
+                        .Select(kvp => kvp.Key);
+
+                    // Associate each object with its correct PSetName
+                    foreach (var obj in entityObjects)
+                    {
+                        objectPSetMap[obj] = entity.PSetName;
+                    }
+                }
+
+                // Pass the mapping to IfcWriter
+                await IfcWriter.WriteToFileAsync(NewModelQA, objectPSetMap);
+            }
+        }
+
+        // Private method to compare a single entity (reused from original CompareRevisions logic)
+        private async Task CompareEntityInternal()
+        {
             // Ensure both OldObjects and NewObjects are initialized
             if (OldObjects == null || NewObjects == null)
             {
                 throw new InvalidOperationException("OldObjects or NewObjects are not initialized.");
             }
-            
-            if (Entity == null)
+
+            var entity = Entities.FirstOrDefault();
+            if (entity == null)
             {
                 throw new InvalidOperationException("Entity is not initialized.");
             }
 
             // Check the comparison method and call the appropriate comparison method
-            switch (Entity.ComparisonMethod)
+            switch (entity.ComparisonMethod)
             {
                 case nameof(ComparisonEnumeration.Identifier):
                 case nameof(ComparisonEnumeration.Contains):
@@ -86,31 +155,53 @@ namespace IfcComparison.Models
                     await Compare();
                     break;
                 default:
-                    throw new NotSupportedException($"Comparison method '{Entity.ComparisonMethod}' is not supported.");
+                    throw new NotSupportedException($"Comparison method '{entity.ComparisonMethod}' is not supported.");
+            }
+        }
+
+        // Original CompareRevisions method maintained for backward compatibility
+        public async Task CompareRevisions()
+        {
+            // Ensure both OldObjects and NewObjects are initialized
+            if (OldObjects == null || NewObjects == null)
+            {
+                throw new InvalidOperationException("OldObjects or NewObjects are not initialized.");
             }
 
-            // Perform the comparison logic here based on Entity.ComparisonMethod and Entity.ComparisonOperator
-            // This is a placeholder for the actual comparison logic
-            // You can implement the logic based on your requirements
-            await Task.Delay(1); // Simulate async operation, replace with actual comparison logic
+            var entity = Entities.FirstOrDefault();
+            if (entity == null)
+            {
+                throw new InvalidOperationException("Entity is not initialized.");
+            }
+
+            // Check the comparison method and call the appropriate comparison method
+            switch (entity.ComparisonMethod)
+            {
+                case nameof(ComparisonEnumeration.Identifier):
+                case nameof(ComparisonEnumeration.Contains):
+                case nameof(ComparisonEnumeration.Exact):
+                    await Compare();
+                    break;
+                default:
+                    throw new NotSupportedException($"Comparison method '{entity.ComparisonMethod}' is not supported.");
+            }
 
             if (IfcWriter != null)
             {
-                await Task.Run(() => IfcWriter.WriteToFileAsync(NewModelQA, Entity.PSetName)); // Call the IfcWriter to write the results to a file asynchronously
+                await Task.Run(() => IfcWriter.WriteToFileAsync(NewModelQA, entity.PSetName));
             }
-
-
         }
 
-
+        // Keep the existing Compare method as it is
         private async Task Compare()
         {
             var ifcComparerResult = new IfcComparerResult();
 
             // Get the comparison operator from the entity
-            var comparisonOperator = Entity.ComparisonOperator;
+            var entity = Entities.FirstOrDefault();
+            var comparisonOperator = entity.ComparisonOperator;
             // Specify the type explicitly for Enum.Parse
-            var comparisonMethod = Enum.Parse<ComparisonEnumeration>(Entity.ComparisonMethod);
+            var comparisonMethod = Enum.Parse<ComparisonEnumeration>(entity.ComparisonMethod);
 
             // Run the comparison tasks in parallel
             var oldObjectsNotInNew = CheckIfIfcObjectsAreInIfcObjects(OldObjects, NewObjects, comparisonOperator, comparisonMethod);
@@ -129,13 +220,8 @@ namespace IfcComparison.Models
 
             IfcWriter = new IfcWriter(ifcComparerResult, NewModelQA.SchemaVersion, FileNameSaveAs);
 
-
-
-
-
-            // Placeholder for comparison logic by property set
-            // Implement the logic based on your requirements
-            await Task.Delay(1); // Simulate async operation, replace with actual comparison logic
+            // Store the results
+            IfcComparisonResult = ifcComparerResult;
         }
 
         private async Task<Dictionary<IIfcObject, Dictionary<string, string>>> PropertyCompare(IfcComparerObjects newObjects, IfcComparerObjects oldObjects, string comparisonOperator, ComparisonEnumeration comparisonEnumeration)
@@ -146,7 +232,7 @@ namespace IfcComparison.Models
             {
                 // Create lookup dictionaries to avoid nested loops
                 var oldObjectLookup = new Dictionary<string, List<KeyValuePair<IIfcObject, string>>>();
-                
+
                 // Step 1: Build a lookup for old objects based on comparison value
                 foreach (var oldObject in oldObjects.IfcStorageObjects)
                 {
@@ -157,7 +243,7 @@ namespace IfcComparison.Models
                         {
                             if (!oldObjectLookup.ContainsKey(oldIdNomValue))
                                 oldObjectLookup[oldIdNomValue] = new List<KeyValuePair<IIfcObject, string>>();
-                            
+
                             oldObjectLookup[oldIdNomValue].Add(new KeyValuePair<IIfcObject, string>(oldIfcObj.Value, oldIdNomValue));
                         }
                     }
@@ -169,20 +255,20 @@ namespace IfcComparison.Models
                     foreach (var newIfcObj in newObject.IfcObjects)
                     {
                         var newIdNomValue = IfcTools.GetComparisonNominalValue(newIfcObj.Value, comparisonOperator);
-                        
+
                         // Skip if no nominal value found
                         if (string.IsNullOrEmpty(newIdNomValue))
                             continue;
-                        
+
                         // Check if we have matching old objects
                         if (oldObjectLookup.TryGetValue(newIdNomValue, out var oldMatches))
                         {
-                            var newPsets = IfcTools.GetPropertySetsFromObject(newIfcObj.Value, Entity.IfcPropertySets);
-                            
+                            var newPsets = IfcTools.GetPropertySetsFromObject(newIfcObj.Value, Entities.FirstOrDefault()?.IfcPropertySets);
+
                             foreach (var oldMatch in oldMatches)
                             {
-                                var oldPsets = IfcTools.GetPropertySetsFromObject(oldMatch.Key, Entity.IfcPropertySets);
-                                
+                                var oldPsets = IfcTools.GetPropertySetsFromObject(oldMatch.Key, Entities.FirstOrDefault()?.IfcPropertySets);
+
                                 // Compare property sets between new and old objects
                                 CompareAndAddPropertySets(newIfcObj.Value, newPsets, oldPsets, result);
                             }
@@ -221,8 +307,8 @@ namespace IfcComparison.Models
                         if (oldObjectLookup.TryGetValue(globalId, out var matchingOldObject))
                         {
                             // We have a match by GlobalId
-                            var newPsets = IfcTools.GetPropertySetsFromObject(newIfcObj.Value, Entity.IfcPropertySets);
-                            var oldPsets = IfcTools.GetPropertySetsFromObject(matchingOldObject, Entity.IfcPropertySets);
+                            var newPsets = IfcTools.GetPropertySetsFromObject(newIfcObj.Value, Entities.FirstOrDefault()?.IfcPropertySets);
+                            var oldPsets = IfcTools.GetPropertySetsFromObject(matchingOldObject, Entities.FirstOrDefault()?.IfcPropertySets);
 
                             // Compare property sets between the new and old objects
                             CompareAndAddPropertySets(newIfcObj.Value, newPsets, oldPsets, result);
@@ -230,8 +316,6 @@ namespace IfcComparison.Models
                     }
                 }
             }
-
-
 
             await Task.Delay(1); // Simulate async operation
             return result;
@@ -252,7 +336,7 @@ namespace IfcComparison.Models
 
                 // Compare the property sets
                 var propertySetResult = CompareQAPropertySets(newPset.HasProperties, oldPset.HasProperties);
-                
+
                 // Add or merge into result
                 if (!result.ContainsKey(newIfcObj))
                 {
@@ -261,7 +345,7 @@ namespace IfcComparison.Models
                 else
                 {
                     var existingProperties = result[newIfcObj];
-                    
+
                     foreach (var kvp in propertySetResult)
                     {
                         if (!existingProperties.ContainsKey(kvp.Key))
@@ -290,7 +374,7 @@ namespace IfcComparison.Models
 
                 var valToWrite = string.Empty;
                 if (oldPropertySet != null)
-                { 
+                {
                     if (oldPropertySingleValue != null)
                     {
                         //Null check to avoid errors where NominalValue is Null
@@ -328,12 +412,8 @@ namespace IfcComparison.Models
 
             }
 
-
             return result;
-
-
         }
-
 
         private static string GetPropertyNominalValue(string comparisonOperator, IfcObjectStorage newObject)
         {
@@ -341,7 +421,6 @@ namespace IfcComparison.Models
             var idNomValue = idValue?.NominalValue?.ToString() ?? string.Empty;
             return idNomValue;
         }
-
 
         /// <summary>
         /// Method to check if IfcObjects in the old list are not present in the new list based on a comparison operator.
@@ -404,17 +483,8 @@ namespace IfcComparison.Models
                 }
             }
 
-
-
             await Task.Delay(1); // Simulate async operation, replace with actual comparison logic
             return result;
-
         }
-
-
-
-
-
-
     }
 }

@@ -23,6 +23,10 @@ namespace IfcComparison.Converters
         {
             if (value is string stringValue && !string.IsNullOrWhiteSpace(stringValue))
             {
+                // Don't split by comma during editing, only when focus is lost
+                if (parameter is bool isEditing && isEditing)
+                    return value;
+                
                 return stringValue.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
             }
             

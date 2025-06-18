@@ -1,7 +1,9 @@
 ﻿
 using IfcComparison.Enumerations;
+using IfcComparison.Logging;
 using IfcComparison.ViewModels;
 using System.Threading.Tasks;
+using WpfUtilities.Utils;
 using Xbim.Ifc;
 using Xunit;
 
@@ -9,6 +11,11 @@ namespace IfcComparison.Tests
 {
     public class IfcComparerObjects
     {
+        static IfcComparerObjects()
+        {
+            // Initialize logging before any tests run
+            LoggerInitializer.EnsureInitialized();
+        }
 
         private static IfcStore OldIfcModel { get; set; }
         private static IfcStore NewIfcModel { get; set; }
@@ -17,6 +24,16 @@ namespace IfcComparison.Tests
 
         private static IfcEntity _entity = new IfcEntity() { ComparisonMethod = ComparisonEnumeration.Contains.ToString(), ComparisonOperator = "ARM.07", Entity = "IIfcReinforcingBar", IfcPropertySets = _pSetToCheck };
         private static IfcEntity _entity_Id = new IfcEntity() { ComparisonMethod = ComparisonEnumeration.Identifier.ToString(), ComparisonOperator = "", Entity = "IIfcReinforcingBar", IfcPropertySets = _pSetToCheck };
+
+        private static List<IfcEntity> _ifcEntities = new List<IfcEntity>()
+        {
+            _entity,
+        };
+
+        private static List<IfcEntity> _ifcEntities_Id = new List<IfcEntity>()
+        {
+            _entity_Id,
+        };
 
         // Initialize the IfcModel helper method before running tests
         public async Task<IfcStore> Initialize_IfcModel(string ifcFilePath)
@@ -86,10 +103,10 @@ namespace IfcComparison.Tests
 
             var filePathIfcQA = @"../../../IfcFiles/Nordstrand/SOS_05NOR_F_KON_OVERGANGSBRU_04C_QA.ifc";
 
-            var ifcComparerTask = Models.IfcComparer.CreateAsync(OldIfcModel, NewIfcModel, filePathIfcQA, "Test Transaction", _entity);
+            var ifcComparerTask = Models.IfcComparer.CreateAsync(OldIfcModel, NewIfcModel, filePathIfcQA, "Test Transaction", _ifcEntities);
             var ifcComparer = await ifcComparerTask;
 
-            await ifcComparer.CompareRevisions(); // Ensure the task completes before proceeding
+            await ifcComparer.CompareAllRevisions(); // Ensure the task completes before proceeding
 
 
 
@@ -110,10 +127,40 @@ namespace IfcComparison.Tests
 
             var filePathIfcQA = @"../../../IfcFiles/Nordstrand/SOS_05NOR_F_KON_OVERGANGSBRU_04C_QA.ifc";
 
-            var ifcComparerTask = Models.IfcComparer.CreateAsync(OldIfcModel, NewIfcModel, filePathIfcQA, "Test Transaction", _entity_Id);
+            var ifcComparerTask = Models.IfcComparer.CreateAsync(OldIfcModel, NewIfcModel, filePathIfcQA, "Test Transaction", _ifcEntities_Id);
             var ifcComparer = await ifcComparerTask;
 
-            await ifcComparer.CompareRevisions(); // Ensure the task completes before proceeding
+            await ifcComparer.CompareAllRevisions(); // Ensure the task completes before proceeding
+
+
+
+        }
+
+        [Fact]
+        public async Task Initialize_IfcComparer_And_Compare_JsonInput()
+        {
+            if (OldIfcModel == null || NewIfcModel == null)
+            {
+                // Initialize the models if they haven't been done yet
+                var task = Task.WhenAll(
+                    Initialize_OldIfcModel(),
+                    Initialize_NewIfcModel()
+                );
+                await task; // Wait for both initializations to complete
+            }
+
+            var filePathIfcQA = @"../../../IfcFiles/Nordstrand/SOS_05NOR_F_KON_OVERGANGSBRU_04C_QA.ifc";
+
+
+            var jsonInputPath = @"C:\\Users\\fkjn\\Downloads\\TestSettings.json";
+            var userSettings = (UserSettings)ReadAndWriteJson.ReadAndDeserialize<UserSettings>(jsonInputPath);
+            var enteties = userSettings.DataGridContentIFCEntities.ToList();
+
+
+            var ifcComparerTask = Models.IfcComparer.CreateAsync(OldIfcModel, NewIfcModel, filePathIfcQA, "Test Transaction", enteties);
+            var ifcComparer = await ifcComparerTask;
+
+            await ifcComparer.CompareAllRevisions(); // Ensure the task completes before proceeding
 
 
 
