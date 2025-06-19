@@ -1,17 +1,10 @@
 ﻿using IfcComparison.Models;
 using IfcComparison.ViewModels;
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
-using Utilities;
+using WpfUtilities.Utils;
 
 namespace IfcComparison
 {
@@ -70,7 +63,7 @@ namespace IfcComparison
 
         }
 
-        private static ObservableCollection<string> AllIfcEntities()
+        public static ObservableCollection<string> AllIfcEntities()
         {
             var obsCol = new ObservableCollection<string>();
             foreach (Type type in IfcTools.IfcEntities)
@@ -99,9 +92,9 @@ namespace IfcComparison
                             {
                                 cell.IsEditing = true;
                             }
-                            var curObj = curCell.Item as IfcEntities;
-                            if (curObj == null) { curObj = new IfcEntities(); }
-                            if (SelectedItem != null){ curObj.IfcEntity = SelectedItem.ToString(); }
+                            var curObj = curCell.Item as IfcEntity;
+                            if (curObj == null) { curObj = new IfcEntity(); }
+                            if (SelectedItem != null){ curObj.Entity = SelectedItem.ToString(); }
                             cell.IsEditing = false;
                             cell.Focus();
                         }

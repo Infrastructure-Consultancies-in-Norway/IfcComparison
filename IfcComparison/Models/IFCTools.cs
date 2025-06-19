@@ -1,29 +1,31 @@
-﻿using System;
+﻿using IfcComparison.Enumerations;
+using IfcComparison.ViewModels;
+using Microsoft.Isam.Esent.Interop;
+using System;
+using System.CodeDom;
+using System.Collections;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
+using System.Reflection;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Security.Cryptography.X509Certificates;
-using System.Reflection;
+using System.Windows.Controls;
+using System.Windows.Markup.Localizer;
 using Xbim.Common;
 using Xbim.Common.Enumerations;
-using Microsoft.Isam.Esent.Interop;
-using System.Windows.Controls;
-using System.Collections.ObjectModel;
-using IfcComparison.ViewModels;
 using Xbim.Common.Exceptions;
-using Xbim.IO.Esent;
-using System.Collections;
-using System.CodeDom;
-using System.Windows.Markup.Localizer;
-using IfcComparison.Enumerations;
+using Xbim.Common.Step21;
 using Xbim.Ifc;
 using Xbim.Ifc4.Interfaces;
 using Xbim.Ifc4.Kernel;
+using Xbim.Ifc4.MeasureResource;
 using Xbim.Ifc4.PropertyResource;
 using Xbim.Ifc4.UtilityResource;
-using Xbim.Ifc4.MeasureResource;
+using Xbim.IO.Esent;
+using Xbim.IO.Xml.BsConf;
 
 
 namespace IfcComparison.Models
@@ -154,29 +156,29 @@ namespace IfcComparison.Models
         /// </summary>
         /// <param name="interfaceName"></param>
         /// <returns></returns>
-        private static Type GetInterfaceType(string interfaceName)
+        public static Type GetInterfaceType(string interfaceName)
         {
-            Type interfaceType;
-            var interfaceTypes = IfcEntities
+            Type interfaceType = IfcEntities
                 .Where(n => n.Name == interfaceName)
                 .Where(n => n.FullName.Contains("Ifc4"))
                 .FirstOrDefault();
 
-            return interfaceType = interfaceTypes as Type;
+            return interfaceType;
 
         }
 
 
 
-        public static string CompareIFCPropertySets(IfcStore oldModel, IfcStore newModel, IfcStore newModelQA, string fileNameSaveAs, string transactionText, ObservableCollection<IfcEntities> ifcEntities)
+        /*
+        public static string CompareIFCPropertySets(IfcStore oldModel, IfcStore newModel, IfcStore newModelQA, string fileNameSaveAs, string transactionText, ObservableCollection<IfcEntity> ifcEntities, string SomeProp)
         {
             var output = "";
 
             
             foreach (var entity in ifcEntities)
             {
-                var interfaceName = entity.IfcEntity;
-                var propSetName = entity.IfcPropertySet;
+                var interfaceName = entity.Entity;
+                var propSetName = entity.IfcPropertySets;
                 var compOperator = entity.ComparisonOperator;
                 var compMethod = entity.ComparisonMethod;
                 
@@ -260,6 +262,8 @@ namespace IfcComparison.Models
             output += "Model Comparison finished!" + Environment.NewLine;
             return output;
         }
+        */
+
 
         private static string CompareIfcObjects<T>(Dictionary<IIfcValue, (List<IIfcProperty>, List<IIfcObject>)> oldDict, Dictionary<IIfcValue, (List<IIfcProperty>, List<IIfcObject>)> newDict, string pSetName, string compOperator, string compMethod, IfcStore model)
         {
@@ -445,13 +449,74 @@ namespace IfcComparison.Models
         /// <param name="instance"></param>
         /// <param name="propsNew"></param>
         /// <param name="propsOld"></param>
-        private static void InsertPropertySet(IfcStore model, IPersistEntity instance, List<IIfcProperty> propsNew, List<IIfcProperty> propsOld)
+        public static void InsertPropertySet(IfcStore model, IPersistEntity instance, List<IIfcProperty> propsNew, List<IIfcProperty> propsOld)
         {
             var newPropSetName = "QA_PSET";
             //if (keyNewExistInOld.Contains(keyNomValue)){propsOld = oldDict[keyNomValue];}
             //else{output += $"{keyNomValue} doesn't exist in old revison. Skipped adding property set." + Environment.NewLine;}
 
             GeneratePropertySetIfc2x3(model, instance, propsNew, propsOld, newPropSetName);
+        }
+
+        public static async Task InsertPropertySet(IfcStore model, IIfcObject instance, Dictionary<string, string> properties, XbimSchemaVersion ifcSchema)
+        {
+            var newPropSetName = "QA_PSET";
+            //if (keyNewExistInOld.Contains(keyNomValue)){propsOld = oldDict[keyNomValue];}
+            //else{output += $"{keyNomValue} doesn't exist in old revison. Skipped adding property set." + Environment.NewLine;}
+            GeneratePropertySetIfc(model, instance, properties, newPropSetName, ifcSchema);
+        }
+
+        public static void GeneratePropertySetIfc(IfcStore model, IIfcObject instance, Dictionary<string, string> properties, string newPropSetName, XbimSchemaVersion ifcSchema)
+        {
+            if (ifcSchema == XbimSchemaVersion.Ifc2X3)
+            {
+                // create new property set to host properties
+                var pSetRel = model.Instances.New<Xbim.Ifc2x3.Kernel.IfcRelDefinesByProperties>(r =>
+                {
+                    var guid = Guid.NewGuid();
+                    var globalId = new Xbim.Ifc2x3.UtilityResource.IfcGloballyUniqueId(guid.ToString());
+                    r.GlobalId = globalId;
+                    r.RelatingPropertyDefinition = model.Instances.New<Xbim.Ifc2x3.Kernel.IfcPropertySet>(pSet =>
+                    {
+                        pSet.Name = newPropSetName;
+                        foreach (var prop in properties)
+                        {
+                            pSet.HasProperties.Add(model.Instances.New<Xbim.Ifc2x3.PropertyResource.IfcPropertySingleValue>(p =>
+                            {
+                                p.Name = prop.Key;
+                                p.NominalValue = new Xbim.Ifc2x3.MeasureResource.IfcText(prop.Value);
+                            }));
+                        }
+                    });
+                });
+                //Add the property set to the instance
+                pSetRel.RelatedObjects.Add((Xbim.Ifc2x3.Kernel.IfcObject)instance);
+            }
+            else
+            {
+                // create new property set to host properties
+                var pSetRel = model.Instances.New<Xbim.Ifc4.Kernel.IfcRelDefinesByProperties>(r =>
+                {
+                    var guid = Guid.NewGuid();
+                    var globalId = new Xbim.Ifc4.UtilityResource.IfcGloballyUniqueId(guid.ToString());
+                    r.GlobalId = globalId;
+                    r.RelatingPropertyDefinition = model.Instances.New<Xbim.Ifc4.Kernel.IfcPropertySet>(pSet =>
+                    {
+                        pSet.Name = newPropSetName;
+                        foreach (var prop in properties)
+                        {
+                            pSet.HasProperties.Add(model.Instances.New<Xbim.Ifc4.PropertyResource.IfcPropertySingleValue>(p =>
+                            {
+                                p.Name = prop.Key;
+                                p.NominalValue = new Xbim.Ifc4.MeasureResource.IfcText(prop.Value);
+                            }));
+                        }
+                    });
+                });
+                //Add the property set to the instance
+                pSetRel.RelatedObjects.Add((Xbim.Ifc4.Kernel.IfcObject)instance);
+            }
+
         }
 
 
@@ -718,6 +783,10 @@ namespace IfcComparison.Models
 
         }
 
+
+        
+
+
         private static Dictionary<IExpressValueType, List<IIfcProperty>> GetAllPropSetToDictId(string comparisonOperator, string comparisonMethod, string propSetName, List<IPersistEntity> instances)
         {
             var dict = new Dictionary<IExpressValueType, List<IIfcProperty>>();
@@ -850,6 +919,47 @@ namespace IfcComparison.Models
             return returnProp;
         }
 
+        public static List<IIfcPropertySet> GetPropertySetsFromObject(IIfcObject ifcObject, List<string> pSetNames)
+        {
+            // Get all property sets from the new object
+            var newPropertySet = ifcObject
+                .IsDefinedBy.OfType<IIfcRelDefinesByProperties>()
+                .SelectMany(rel => rel.RelatingPropertyDefinition.PropertySetDefinitions)
+                .OfType<IIfcPropertySet>();
+
+            // Get the property sets given in the entity
+            var newPropertySetFiltered = newPropertySet
+                .Where(ps => pSetNames.Contains(ps.Name.ToString(), StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            return newPropertySetFiltered;
+
+        }
+
+
+        public static string GetComparisonNominalValue(IIfcObject ifcObject, string compOperator)
+        {
+            var result = string.Empty;
+
+            // Get all PropertySet on the object
+            var objPsets = ifcObject.IsDefinedBy.OfType<IIfcRelDefinesByProperties>()
+                .SelectMany(rel => rel.RelatingPropertyDefinition.PropertySetDefinitions)
+                .OfType<IIfcPropertySet>();
+
+            // Loop through all properties in the PropertySets and check if the name contains the ComparisonOperator and return the first nominal value found.
+            var propertyNomVal = objPsets
+                .SelectMany(ps => ps.HasProperties)
+                .Where(prop => prop is IIfcPropertySingleValue)
+                .Cast<IIfcPropertySingleValue>()
+                .FirstOrDefault(prop => prop.Name.ToString().Contains(compOperator));
+
+            if (!string.IsNullOrEmpty(propertyNomVal?.NominalValue.ToString()))
+            {
+                result = propertyNomVal.NominalValue.ToString();
+            }
+
+            return result;
+        }
 
         private static void CreateQAPropSet(IfcStore model, List<IPersistEntity> instances, string newPropSetName, string propSetName)
         {
@@ -890,6 +1000,7 @@ namespace IfcComparison.Models
             }
 
         }
+
 
 
         /*

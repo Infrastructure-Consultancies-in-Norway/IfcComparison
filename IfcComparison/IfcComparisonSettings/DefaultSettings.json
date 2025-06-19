@@ -1,0 +1,43 @@
+{
+  "FilePathOldIFC": "",
+  "FilePathNewIFC": "",
+  "FilePathIFCToQA": "",
+  "DataGridContentIFCEntities": [
+    {
+      "PSetName": "QA_REBAR",
+      "Entity": "IIfcReinforcingBar",
+      "IfcPropertySets": [ "MERKNADER" ],
+      "ComparisonOperator": "K200",
+      "ComparisonMethod": "Contains"
+    },
+    {
+      "PSetName": "QA_PROXY",
+      "Entity": "IIfcBuildingElementProxy",
+      "IfcPropertySets": [ "MERKNADER" ],
+      "ComparisonOperator": "K001",
+      "ComparisonMethod": "Contains"
+    },
+    {
+      "PSetName": "QA_PSET",
+      "Entity": "IIfcBeam",
+      "IfcPropertySets": [ "MERKNADER" ],
+      "ComparisonOperator": "K001",
+      "ComparisonMethod": "Contains"
+    },
+    {
+      "PSetName": "QA_PSET",
+      "Entity": "IIfcReinforcingBar",
+      "IfcPropertySets": [ "SOS-KON_Armering", "SOS-KON_Felles" ],
+      "ComparisonOperator": "ARM.07",
+      "ComparisonMethod": "Contains"
+    },
+    {
+      "PSetName": "QA_PSET",
+      "Entity": "IIfcReinforcingBar",
+      "IfcPropertySets": [ "KON_Armering", "KON_Felles" ],
+      "ComparisonOperator": "ARM.07",
+      "ComparisonMethod": "Contains"
+    }
+
+  ]
+}

@@ -14,7 +14,7 @@ namespace IfcComparison
         public string FilePathOldIFC { get; set; }
         public string FilePathNewIFC { get; set; }
         public string FilePathIFCToQA { get; set; }
-        public ObservableCollection<IfcEntities> DataGridContentIFCEntities { get; set ; }
+        public ObservableCollection<IfcEntity> DataGridContentIFCEntities { get; set ; }
 
 
         public UserSettings()
