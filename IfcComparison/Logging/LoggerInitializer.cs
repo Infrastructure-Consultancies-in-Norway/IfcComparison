@@ -35,13 +35,13 @@ namespace IfcComparison.Logging
                     }
                     
                     // Create a log file for each day
-                    var logFile = Path.Combine(logDir, $"app-{DateTime.Now:yyyy-MM-dd}.log");
+                    var logFile = Path.Combine(logDir, $"IfcComparison-{DateTime.Now:yyyy-MM-dd}.log");
                     
                     // Initialize logging service
                     LoggingService.Initialize(logFile, LogLevel.Information);
                     
                     var logger = LoggingService.CreateLogger(typeof(LoggerInitializer).FullName);
-                    logger.LogInformation("Logging system initialized at {Time}", DateTime.Now);
+                    logger.LogDebug("Logging system initialized at {Time}", DateTime.Now);
                     
                     _isInitialized = true;
                 }

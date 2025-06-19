@@ -1,4 +1,5 @@
 ﻿using IfcComparison.Enumerations;
+using IfcComparison.Logging;
 using IfcComparison.Models;
 using Microsoft.Win32;
 using System;
@@ -66,6 +67,13 @@ namespace IfcComparison.ViewModels
 
         public ObservableCollection<IfcEntity> DataGridContentIFCEntities { get; set; } = new ObservableCollection<IfcEntity>();
 
+        private bool isGeneratingIFCPset = false;
+        public bool IsGeneratingIFCPset 
+        { 
+            get => isGeneratingIFCPset; 
+            set => SetNotify(ref isGeneratingIFCPset, value); 
+        }
+
         #endregion
 
         #region Commands
@@ -89,7 +97,7 @@ namespace IfcComparison.ViewModels
         private ICommand mGenerateIFCPsetCommand { get; set; }
         public ICommand GenerateIFCPsetCommand
         {
-            get { return mGenerateIFCPsetCommand ?? (mGenerateIFCPsetCommand = new CommandHandler(() => GenerateIFCPset(), true)); }
+            get { return mGenerateIFCPsetCommand ?? (mGenerateIFCPsetCommand = new CommandHandler(async () => await GenerateIFCPsetAsync(), true)); }
         }
 
         private ICommand mClearOutputCommand { get; set; }
@@ -143,6 +151,19 @@ namespace IfcComparison.ViewModels
             {
                 ComparisonMethodCol.Add(item);
             }
+
+            // Ensure logger is initialized
+            LoggerInitializer.EnsureInitialized();
+
+            // Set up the logging service to append to OutputConsole
+            LoggingService.SetOutputConsoleAction(message => 
+            {
+                // Use Dispatcher to ensure UI thread safety
+                Application.Current.Dispatcher.Invoke(() => 
+                {
+                    OutputConsole += message + Environment.NewLine;
+                });
+            });
 
             LoadUserSettings(@"IfcComparisonSettings\\DefaultSettings.json");
             UserSettingsPath = string.Empty;
@@ -353,52 +374,101 @@ namespace IfcComparison.ViewModels
             OutputConsole += $"IFC file: {Path.GetFileName(FilePathIFCToQA)} {strLoaded}" + Environment.NewLine;
         }
 
-        private async void GenerateIFCPset()
+        private async Task GenerateIFCPsetAsync()
         {
-            if (File.Exists(FilePathOldIFC) && File.Exists(FilePathNewIFC))
+            try
             {
-                if (Directory.Exists(Path.GetDirectoryName(FilePathIFCToQA)))
+                // Set busy indicator
+                IsGeneratingIFCPset = true;
+
+                if (File.Exists(FilePathOldIFC) && File.Exists(FilePathNewIFC))
                 {
-                    if (DataGridContentIFCEntities.Count > 0)
+                    if (Directory.Exists(Path.GetDirectoryName(FilePathIFCToQA)))
                     {
-                        if (IsOldIFCLoaded == "Loaded" && IsNewIFCQALoaded == "Loaded")
+                        if (DataGridContentIFCEntities.Count > 0)
                         {
-                            OutputConsole += "IFC Comparison running..." + Environment.NewLine;
+                            if (IsOldIFCLoaded == "Loaded" && IsNewIFCQALoaded == "Loaded")
+                            {
+                                // Update UI on the UI thread
+                                Application.Current.Dispatcher.Invoke(() => 
+                                {
+                                    OutputConsole += "IFC Comparison running..." + Environment.NewLine;
+                                });
 
-                            var entitiesList = DataGridContentIFCEntities.ToList();
+                                var entitiesList = DataGridContentIFCEntities.ToList();
 
-                            var ifcComparerTask = Models.IfcComparer.CreateAsync(
-                                OldModel,
-                                NewModelQA,
-                                FilePathIFCToQA,
-                                "Transaction",
-                                entitiesList);
+                                // Create progress reporting action
+                                Action<string> reportProgress = (message) => 
+                                {
+                                    Application.Current.Dispatcher.Invoke(() => 
+                                    {
+                                        OutputConsole += message + Environment.NewLine;
+                                    });
+                                };
 
-                            var ifcComparer = await ifcComparerTask;
+                                // Run the heavy operation on a background thread
+                                var ifcComparerTask = await Task.Run(async () =>
+                                {
+                                    // Create the comparer
+                                    reportProgress("Creating IFC comparer...");
+                                    var comparer = await Models.IfcComparer.CreateAsync(
+                                        OldModel,
+                                        NewModelQA,
+                                        FilePathIFCToQA,
+                                        "Transaction",
+                                        entitiesList);
+                                    
+                                    // Compare revisions
+                                    reportProgress("Starting comparison of all entities...");
+                                    await comparer.CompareAllRevisions();
+                                    
+                                    return comparer;
+                                });
 
-                            await ifcComparer.CompareAllRevisions();
-
-                            OutputConsole += "IFC Comparison completed and written to file." + Environment.NewLine;
+                                // Update UI when complete
+                                Application.Current.Dispatcher.Invoke(() => 
+                                {
+                                    OutputConsole += "IFC Comparison completed and written to file." + Environment.NewLine;
+                                });
+                            }
+                            else
+                            {
+                                MessageBox.Show("Models not loaded, wait until labels change to loaded!");
+                            }
                         }
                         else
                         {
-                            MessageBox.Show("Models not loaded, wait until labels change to loaded!");
+                            MessageBox.Show("No information set in the IFC Entity settings!");
                         }
                     }
                     else
                     {
-                        MessageBox.Show("No information set in the IFC Entity settings!");
+                        MessageBox.Show("QA Folder path doesn't exist!");
                     }
                 }
                 else
                 {
-                    MessageBox.Show("QA Folder path doesn't exist!");
+                    MessageBox.Show("Path to IFCs doesn't exist!");
                 }
             }
-            else
+            catch (Exception ex)
             {
-                MessageBox.Show("Path to IFCs doesn't exist!");
+                Application.Current.Dispatcher.Invoke(() => 
+                {
+                    OutputConsole += $"Error during IFC comparison: {ex.Message}" + Environment.NewLine;
+                    MessageBox.Show($"An error occurred: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                });
             }
+            finally
+            {
+                // Always reset busy indicator
+                IsGeneratingIFCPset = false;
+            }
+        }
+
+        private async Task GenerateIFCPset()
+        {
+            await GenerateIFCPsetAsync();
         }
 
         private async Task<IfcStore> OpenIFCModelAsync(string fileName)

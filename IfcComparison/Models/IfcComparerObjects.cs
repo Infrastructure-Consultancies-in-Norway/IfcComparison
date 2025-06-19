@@ -72,7 +72,7 @@ namespace IfcComparison.Models
                     }
                     else
                     {
-                        _logger.LogWarning("No objects found for property set {PropertySetName}", propertySet.Name);
+                        _logger.LogDebug("No objects found for property set {PropertySetName}", propertySet.Name);
                     }
                 }
 

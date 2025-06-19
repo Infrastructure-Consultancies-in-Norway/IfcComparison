@@ -20,7 +20,7 @@ namespace IfcComparison
             
             // Log application startup
             var logger = LoggingService.CreateLogger<App>();
-            logger.LogInformation("IfcComparison standalone application started at {Time}", DateTime.Now);
+            logger.LogDebug("IfcComparison standalone application started at {Time}", DateTime.Now);
         }
         
         protected override void OnExit(ExitEventArgs e)
@@ -28,7 +28,7 @@ namespace IfcComparison
             try
             {
                 var logger = LoggingService.CreateLogger<App>();
-                logger.LogInformation("IfcComparison standalone application exiting at {Time}", DateTime.Now);
+                logger.LogDebug("IfcComparison standalone application exiting at {Time}", DateTime.Now);
             }
             catch
             {

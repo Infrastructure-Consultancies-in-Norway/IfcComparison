@@ -27,7 +27,7 @@ namespace IfcComparison
             LoggerInitializer.EnsureInitialized();
 
             _logger = LoggingService.CreateLogger<MainWindow>();
-            _logger.LogInformation("IfcComparison UserControl created at {Time}", DateTime.Now);
+            _logger.LogDebug("IfcComparison UserControl created at {Time}", DateTime.Now);
 
             // Subscribe to loaded event for logging
             Loaded += MainWindow_Loaded;
@@ -42,13 +42,13 @@ namespace IfcComparison
         {
             // Detect if running standalone or embedded
             bool isStandalone = Application.Current.MainWindow?.GetType() == typeof(MainWindow);
-            _logger.LogInformation("IfcComparison UserControl loaded at {Time}. Running mode: {Mode}",
+            _logger.LogDebug("IfcComparison UserControl loaded at {Time}. Running mode: {Mode}",
                 DateTime.Now, isStandalone ? "Standalone" : "Embedded");
         }
 
         private void MainWindow_Unloaded(object sender, RoutedEventArgs e)
         {
-            _logger.LogInformation("IfcComparison UserControl unloaded at {Time}", DateTime.Now);
+            _logger.LogDebug("IfcComparison UserControl unloaded at {Time}", DateTime.Now);
         }
 
         private void DataGrid_BeginningEdit(object sender, DataGridBeginningEditEventArgs e)

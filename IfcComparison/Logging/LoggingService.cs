@@ -7,6 +7,7 @@ namespace IfcComparison.Logging
     public static class LoggingService
     {
         private static ILoggerFactory _loggerFactory;
+        private static Action<string> _outputConsoleAction;
         
         public static void Initialize(string logFilePath, LogLevel minimumLogLevel = LogLevel.Information)
         {
@@ -22,6 +23,26 @@ namespace IfcComparison.Logging
                 // Set minimum log level
                 builder.SetMinimumLevel(minimumLogLevel);
             });
+        }
+        
+        public static void SetOutputConsoleAction(Action<string> outputAction)
+        {
+            _outputConsoleAction = outputAction;
+
+            if (_loggerFactory == null)
+            {
+                throw new InvalidOperationException(
+                    "Logger factory has not been initialized. Call Initialize method first.");
+            }
+
+            // If logger factory already exists, add the UI console provider
+            if (_loggerFactory != null && _outputConsoleAction != null)
+            {
+                // We'll filter to only show Information level or higher in the UI
+                _loggerFactory.AddProvider(new ConsoleLoggerProvider(
+                    _outputConsoleAction, 
+                    (category, logLevel) => logLevel >= LogLevel.Information));
+            }
         }
         
         public static ILogger<T> CreateLogger<T>()

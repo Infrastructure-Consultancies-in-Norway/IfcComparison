@@ -15,6 +15,8 @@ using Xbim.Ifc4.Kernel;
 using Xbim.Ifc4.MeasureResource;
 using Xbim.Ifc4.PropertyResource;
 using Xbim.Ifc4.UtilityResource;
+using Microsoft.Extensions.Logging;
+using IfcComparison.Logging;
 
 namespace IfcComparison.Models
 {
@@ -30,6 +32,7 @@ namespace IfcComparison.Models
         public IfcComparerResult IfcComparisonResult { get; private set; } = new IfcComparerResult();
         public IfcWriter IfcWriter { get; set; }
         private Dictionary<IIfcObject, Dictionary<string, string>> AllComparedObjects { get; set; } = new Dictionary<IIfcObject, Dictionary<string, string>>();
+        private readonly ILogger<IfcComparer> _logger;
 
         // Private constructor for the factory method
         private IfcComparer(IfcStore oldModel, IfcStore newModelQA, string fileNameSaveAs, string transactionText, List<IfcEntity> entities)
@@ -39,6 +42,7 @@ namespace IfcComparison.Models
             FileNameSaveAs = fileNameSaveAs;
             TransactionText = transactionText;
             Entities = entities;
+            _logger = LoggingService.CreateLogger<IfcComparer>();
         }
 
         // Public async factory method with List<IfcEntity>
@@ -63,6 +67,8 @@ namespace IfcComparison.Models
                 throw new InvalidOperationException("No entities provided for comparison.");
             }
 
+            _logger.LogInformation("Starting comparison of all entities...");
+            
             // Create combined result object
             var combinedResult = new IfcComparerResult
             {
@@ -71,12 +77,20 @@ namespace IfcComparison.Models
                 ComparedIfcObjects = new Dictionary<IIfcObject, Dictionary<string, string>>()
             };
 
+            int totalEntityCount = Entities.Count;
+            int currentEntityIndex = 0;
+
             // Process each entity
             foreach (var entity in Entities)
             {
+                currentEntityIndex++;
+                _logger.LogInformation($"Processing entity {currentEntityIndex}/{totalEntityCount}: {entity.Entity}");
+                
                 // Initialize objects for this specific entity
                 var oldObjects = await IfcComparerObjects.CreateAsync(OldModel, entity);
                 var newObjects = await IfcComparerObjects.CreateAsync(NewModelQA, entity);
+
+                _logger.LogInformation($"Found {oldObjects.IfcStorageObjects?.Count ?? 0} objects in old model and {newObjects.IfcStorageObjects?.Count ?? 0} objects in new model");
 
                 // Create a temp IfcComparer for this entity to reuse existing comparison logic
                 var tempComparer = new IfcComparer(OldModel, NewModelQA, FileNameSaveAs, TransactionText, new List<IfcEntity> { entity })
@@ -86,7 +100,15 @@ namespace IfcComparison.Models
                 };
 
                 // Process this entity
+                _logger.LogInformation($"Comparing '{entity.Entity}' objects using {entity.ComparisonMethod} method...");
                 await tempComparer.CompareEntityInternal();
+
+                // Log comparison results
+                int oldNotInNewCount = tempComparer.IfcComparisonResult.OldObjectsNotInNew?.Count ?? 0;
+                int newNotInOldCount = tempComparer.IfcComparisonResult.NewObjectsNotInOld?.Count ?? 0;
+                int comparedObjectsCount = tempComparer.IfcComparisonResult.ComparedIfcObjects?.Count ?? 0;
+                
+                _logger.LogInformation($"Results for '{entity.Entity}': {oldNotInNewCount} removed objects, {newNotInOldCount} new objects, {comparedObjectsCount} compared objects");
 
                 // Combine the results
                 combinedResult.OldObjectsNotInNew.AddRange(tempComparer.IfcComparisonResult.OldObjectsNotInNew ?? new List<IfcObjectStorage>());
@@ -102,12 +124,20 @@ namespace IfcComparison.Models
             // Store the combined results
             IfcComparisonResult = combinedResult;
 
+            // Log final totals
+            _logger.LogInformation($"Comparison complete. Total results: " + 
+                $"{combinedResult.OldObjectsNotInNew?.Count ?? 0} removed objects, " +
+                $"{combinedResult.NewObjectsNotInOld?.Count ?? 0} new objects, " +
+                $"{combinedResult.ComparedIfcObjects?.Count ?? 0} compared objects");
+
             // Set up the IfcWriter with combined results
             IfcWriter = new IfcWriter(IfcComparisonResult, NewModelQA.SchemaVersion, FileNameSaveAs);
 
             // Now write all results to file once
             if (Entities.Any())
             {
+                _logger.LogInformation("Writing results to file...");
+                
                 // Create a dictionary to map objects to their appropriate PSetNames
                 var objectPSetMap = new Dictionary<Xbim.Ifc4.Interfaces.IIfcObject, string>();
 
@@ -128,6 +158,7 @@ namespace IfcComparison.Models
 
                 // Pass the mapping to IfcWriter
                 await IfcWriter.WriteToFileAsync(NewModelQA, objectPSetMap);
+                _logger.LogInformation("Results successfully written to file");
             }
         }
 
@@ -152,6 +183,7 @@ namespace IfcComparison.Models
                 case nameof(ComparisonEnumeration.Identifier):
                 case nameof(ComparisonEnumeration.Contains):
                 case nameof(ComparisonEnumeration.Exact):
+                    _logger.LogInformation($"Using comparison method: {entity.ComparisonMethod}");
                     await Compare();
                     break;
                 default:
@@ -203,20 +235,29 @@ namespace IfcComparison.Models
             // Specify the type explicitly for Enum.Parse
             var comparisonMethod = Enum.Parse<ComparisonEnumeration>(entity.ComparisonMethod);
 
+            _logger.LogInformation($"Starting comparison using operator '{comparisonOperator}' and method '{comparisonMethod}'");
+
             // Run the comparison tasks in parallel
+            _logger.LogInformation("Checking for objects not in the other model...");
             var oldObjectsNotInNew = CheckIfIfcObjectsAreInIfcObjects(OldObjects, NewObjects, comparisonOperator, comparisonMethod);
             var newObjectsNotInOld = CheckIfIfcObjectsAreInIfcObjects(NewObjects, OldObjects, comparisonOperator, comparisonMethod);
 
-            // First we will check the
+            // First we will check the properties
+            _logger.LogInformation("Comparing properties between models...");
             var propertyCompareResult = PropertyCompare(NewObjects, OldObjects, comparisonOperator, comparisonMethod);
 
             // Wait for tasks to complete
+            _logger.LogInformation("Waiting for all comparison tasks to complete...");
             await Task.WhenAll(oldObjectsNotInNew, newObjectsNotInOld, propertyCompareResult);
 
             // Add the results to the IfcComparerResult
             ifcComparerResult.OldObjectsNotInNew = await oldObjectsNotInNew;
             ifcComparerResult.NewObjectsNotInOld = await newObjectsNotInOld;
             ifcComparerResult.ComparedIfcObjects = await propertyCompareResult;
+
+            _logger.LogInformation($"Comparison results: {ifcComparerResult.OldObjectsNotInNew.Count} old objects not in new, " +
+                $"{ifcComparerResult.NewObjectsNotInOld.Count} new objects not in old, " +
+                $"{ifcComparerResult.ComparedIfcObjects.Count} objects compared");
 
             IfcWriter = new IfcWriter(ifcComparerResult, NewModelQA.SchemaVersion, FileNameSaveAs);
 
@@ -226,14 +267,19 @@ namespace IfcComparison.Models
 
         private async Task<Dictionary<IIfcObject, Dictionary<string, string>>> PropertyCompare(IfcComparerObjects newObjects, IfcComparerObjects oldObjects, string comparisonOperator, ComparisonEnumeration comparisonEnumeration)
         {
+            _logger.LogInformation($"Starting property comparison using {comparisonEnumeration} method");
+            
             var result = new Dictionary<IIfcObject, Dictionary<string, string>>();
 
             if (comparisonEnumeration != ComparisonEnumeration.Identifier)
             {
+                _logger.LogInformation("Using property-based comparison");
+                
                 // Create lookup dictionaries to avoid nested loops
                 var oldObjectLookup = new Dictionary<string, List<KeyValuePair<IIfcObject, string>>>();
 
                 // Step 1: Build a lookup for old objects based on comparison value
+                _logger.LogInformation("Building lookup dictionary for old objects");
                 foreach (var oldObject in oldObjects.IfcStorageObjects)
                 {
                     foreach (var oldIfcObj in oldObject.IfcObjects)
@@ -248,8 +294,11 @@ namespace IfcComparison.Models
                         }
                     }
                 }
+                _logger.LogInformation($"Created lookup with {oldObjectLookup.Count} unique values from old model");
 
                 // Step 2: Process new objects and compare with old ones using the lookup
+                int matchCount = 0;
+                _logger.LogInformation("Comparing new objects against old objects");
                 foreach (var newObject in newObjects.IfcStorageObjects)
                 {
                     foreach (var newIfcObj in newObject.IfcObjects)
@@ -271,13 +320,17 @@ namespace IfcComparison.Models
 
                                 // Compare property sets between new and old objects
                                 CompareAndAddPropertySets(newIfcObj.Value, newPsets, oldPsets, result);
+                                matchCount++;
                             }
                         }
                     }
                 }
+                _logger.LogInformation($"Completed comparison with {matchCount} property set comparisons");
             }
             else
             {
+                _logger.LogInformation("Using GlobalId-based comparison");
+                
                 // For Identifier comparison, we'll use the GlobalId directly
 
                 // Step 1: Build a lookup dictionary of old objects by their GlobalIds
@@ -294,8 +347,10 @@ namespace IfcComparison.Models
                         }
                     }
                 }
+                _logger.LogInformation($"Created lookup with {oldObjectLookup.Count} objects from old model by GlobalId");
 
                 // Step 2: Process new objects and compare with old ones using GlobalId
+                int matchCount = 0;
                 foreach (var newObject in newObjects.IfcStorageObjects)
                 {
                     foreach (var newIfcObj in newObject.IfcObjects)
@@ -312,11 +367,14 @@ namespace IfcComparison.Models
 
                             // Compare property sets between the new and old objects
                             CompareAndAddPropertySets(newIfcObj.Value, newPsets, oldPsets, result);
+                            matchCount++;
                         }
                     }
                 }
+                _logger.LogInformation($"Completed comparison with {matchCount} GlobalId matches");
             }
 
+            _logger.LogInformation($"Property comparison complete with {result.Count} results");
             await Task.Delay(1); // Simulate async operation
             return result;
         }
