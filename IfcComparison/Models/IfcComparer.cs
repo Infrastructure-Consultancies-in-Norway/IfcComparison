@@ -239,8 +239,8 @@ namespace IfcComparison.Models
 
             // Run the comparison tasks in parallel
             _logger.LogInformation("Checking for objects not in the other model...");
-            var oldObjectsNotInNew = CheckIfIfcObjectsAreInIfcObjects(OldObjects, NewObjects, comparisonOperator, comparisonMethod);
-            var newObjectsNotInOld = CheckIfIfcObjectsAreInIfcObjects(NewObjects, OldObjects, comparisonOperator, comparisonMethod);
+            var oldObjectsNotInNew = CheckIfIfcObjectsAreInIfcObjects(OldObjects, NewObjects, comparisonOperator, comparisonMethod, "new");
+            var newObjectsNotInOld = CheckIfIfcObjectsAreInIfcObjects(NewObjects, OldObjects, comparisonOperator, comparisonMethod, "old");
 
             // First we will check the properties
             _logger.LogInformation("Comparing properties between models...");
@@ -487,7 +487,7 @@ namespace IfcComparison.Models
         /// <param name="newObjects"></param>
         /// <param name="comparisonOperator"></param>
         /// <returns></returns>
-        private async Task<List<IfcObjectStorage>> CheckIfIfcObjectsAreInIfcObjects(IfcComparerObjects oldObjects, IfcComparerObjects newObjects, string comparisonOperator, ComparisonEnumeration comparisonEnumeration)
+        private async Task<List<IfcObjectStorage>> CheckIfIfcObjectsAreInIfcObjects(IfcComparerObjects oldObjects, IfcComparerObjects newObjects, string comparisonOperator, ComparisonEnumeration comparisonEnumeration, string newOld)
         {
             var result = new List<IfcObjectStorage>();
 
@@ -513,6 +513,7 @@ namespace IfcComparison.Models
                     if (shouldAdd)
                     {
                         result.Add(oldObject);
+                        _logger.LogInformation($"Object with nominal value '{oldIdNomValue}' not found in {newOld} objects.");
                     }
                 }
             }
@@ -537,6 +538,8 @@ namespace IfcComparison.Models
                     if (shouldAdd)
                     {
                         result.Add(oldObject);
+                        _logger.LogInformation($"Object with nominal value '{oldIdNomValues}' not found in {newOld} objects.");
+                        //_logger.LogInformation($"Object with nominal value '{oldIdNomValues}' not found in {newOld} objects");
                     }
                 }
             }
