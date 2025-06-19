@@ -24,6 +24,10 @@ namespace IfcComparison.ViewModels
 
         #region Properties
 
+        private string _user = Environment.UserName;
+        private string _semanticVersion = string.Empty;
+        private string _appName = Assembly.GetExecutingAssembly().GetName().Name;
+
         private string mFilePathOldIFC;
         public string FilePathOldIFC { get => mFilePathOldIFC; set => SetNotify(ref mFilePathOldIFC, value); }
 
@@ -156,10 +160,10 @@ namespace IfcComparison.ViewModels
             LoggerInitializer.EnsureInitialized();
 
             // Set up the logging service to append to OutputConsole
-            LoggingService.SetOutputConsoleAction(message => 
+            LoggingService.SetOutputConsoleAction(message =>
             {
                 // Use Dispatcher to ensure UI thread safety
-                Application.Current.Dispatcher.Invoke(() => 
+                Application.Current.Dispatcher.Invoke(() =>
                 {
                     OutputConsole += message + Environment.NewLine;
                 });
@@ -173,9 +177,9 @@ namespace IfcComparison.ViewModels
             IsNewIFCLoaded = "Not Loaded";
             IsNewIFCQALoaded = "Not Loaded";
 
-            var versionString = Assembly.GetExecutingAssembly().GetName().Version.ToString();
-            var appName = Assembly.GetExecutingAssembly().GetName().Name;
-            Version = $"{appName} Version: {versionString}";
+            var assVersion = Assembly.GetExecutingAssembly().GetName().Version;
+            _semanticVersion = assVersion.ToString(3); // Get major, minor, and build version
+            Version = $"{_appName} Version: {_semanticVersion}";
 
             GetEntities();
         }
@@ -483,11 +487,11 @@ namespace IfcComparison.ViewModels
             var editor = new XbimEditorCredentials
             {
                 ApplicationDevelopersName = "FKJN",
-                ApplicationFullName = "QA BIM",
+                ApplicationFullName = _appName,
                 ApplicationIdentifier = "QA BIM APP",
-                ApplicationVersion = "0.1.0",
-                EditorsFamilyName = "Fredrik",
-                EditorsGivenName = "Jacobsen",
+                ApplicationVersion = _semanticVersion,
+                EditorsFamilyName = _user,
+                EditorsGivenName = _user,
                 EditorsOrganisationName = "COWI AS"
             };
 
