@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Xbim.Common;
 using Xbim.Ifc;
 using Xbim.Ifc4.Interfaces;
 
@@ -57,11 +58,14 @@ namespace IfcComparison.Models
 
                 _logger.LogDebug("Filtered to {Count} property sets that match criteria", filteredPropertySets.Count);
 
+                // PERFORMANCE IMPROVEMENT: Build relationship cache ONCE before processing property sets
+                var relationshipCache = BuildRelationshipCache();
+
                 foreach (var propertySet in filteredPropertySets)
                 {
                     // Create a new IfcObjectStorage for each property set and add it to the list
                     _logger.LogTrace("Processing property set: {PropertySetName}", propertySet.Name);
-                    var ifcObjectStorage = new IfcObjectStorage(propertySet, IfcComparerModel, Entity);
+                    var ifcObjectStorage = new IfcObjectStorage(propertySet, IfcComparerModel, Entity, relationshipCache);
 
                     // Check if the IfcObjectStorage is not null before adding it to the list
                     if (ifcObjectStorage != null && ifcObjectStorage.IfcObjects.Count > 0)
@@ -87,6 +91,28 @@ namespace IfcComparison.Models
                 _logger.LogError(ex, "Error initializing IFC objects: {Message}", ex.Message);
                 throw;
             }
+        }
+
+        private Dictionary<int, List<IIfcRelDefinesByProperties>> BuildRelationshipCache()
+        {
+            _logger.LogDebug("Building relationship cache for performance optimization");
+            var cache = new Dictionary<int, List<IIfcRelDefinesByProperties>>();
+            var allRelationships = IfcComparerModel.Instances.OfType<IIfcRelDefinesByProperties>().ToList();
+            _logger.LogDebug("Found {Count} total relationships to cache", allRelationships.Count);
+            
+            foreach (var rel in allRelationships)
+            {
+                if (rel.RelatingPropertyDefinition != null)
+                {
+                    var entityLabel = ((IPersistEntity)rel.RelatingPropertyDefinition).EntityLabel;
+                    if (!cache.ContainsKey(entityLabel))
+                        cache[entityLabel] = new List<IIfcRelDefinesByProperties>();
+                    cache[entityLabel].Add(rel);
+                }
+            }
+            
+            _logger.LogDebug("Cached relationships for {Count} unique property definitions", cache.Count);
+            return cache;
         }
     }
 }

@@ -28,7 +28,8 @@ namespace IfcComparison.Models
         {
         }
 
-        public IfcObjectStorage(IIfcPropertySet ifcPropertySet, IfcStore ifcModel, IfcEntity ifcEntity)
+        public IfcObjectStorage(IIfcPropertySet ifcPropertySet, IfcStore ifcModel, IfcEntity ifcEntity, 
+            Dictionary<int, List<IIfcRelDefinesByProperties>> relationshipCache)
         {
             _ifcModel = ifcModel;
             _ifcEntity = ifcEntity;
@@ -42,30 +43,22 @@ namespace IfcComparison.Models
             IfcObjects = new Dictionary<IfcGloballyUniqueId, IIfcObject>();
             if (ifcPropertySet != null)
             {
-                // First, get all relationships of type IIfcRelDefinesByProperties
-                var relationships = _ifcModel.Instances.OfType<IIfcRelDefinesByProperties>().ToList();
-                _logger.LogDebug("Found {Count} IIfcRelDefinesByProperties relationships", relationships.Count);
+                // PERFORMANCE IMPROVEMENT: Use cached relationships instead of querying all relationships
+                var entityLabel = ((IPersistEntity)ifcPropertySet).EntityLabel;
+                var matchingRelationships = relationshipCache.ContainsKey(entityLabel) 
+                    ? relationshipCache[entityLabel] 
+                    : new List<IIfcRelDefinesByProperties>();
                 
-                // Filter relationships using entity ID comparison instead of object reference equality
-                var matchingRelationships = relationships
-                    .Where(rel => rel.RelatingPropertyDefinition != null && 
-                                 ((IPersistEntity)rel.RelatingPropertyDefinition).EntityLabel == ((IPersistEntity)ifcPropertySet).EntityLabel)
-                    .ToList();
-                _logger.LogDebug("Found {Count} relationships with matching PropertySet EntityLabel: {Label}",
-                    matchingRelationships.Count, ((IPersistEntity)ifcPropertySet).EntityLabel);
+                _logger.LogDebug("Found {Count} cached relationships with matching PropertySet EntityLabel: {Label}",
+                    matchingRelationships.Count, entityLabel);
 
-                // Get all related objects from matching relationships
-                var relatedObjects = matchingRelationships
-                    .SelectMany(rel => rel.RelatedObjects)
-                    .ToList();
-                _logger.LogDebug("Found {Count} related objects for PropertySet", relatedObjects.Count);
-
-                // Get the target type from the ifcEntity string
+                // Get the target type from the ifcEntity string (get this BEFORE processing objects)
                 var targetType = IfcTools.GetInterfaceType(_ifcEntity.Entity);
                 _logger.LogDebug("Target type for filtering: {Type}", targetType?.Name ?? "null");
-                
-                // Filter to objects of the target type
-                var filteredObjects = relatedObjects
+
+                // Get all related objects from matching relationships, filtering by type immediately
+                var filteredObjects = matchingRelationships
+                    .SelectMany(rel => rel.RelatedObjects)
                     .Where(obj => targetType != null && targetType.IsInstanceOfType(obj))
                     .Cast<IIfcObject>()
                     .ToList();
