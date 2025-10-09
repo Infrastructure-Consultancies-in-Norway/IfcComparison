@@ -78,12 +78,14 @@ namespace IfcComparison.Models
             };
 
             int totalEntityCount = Entities.Count;
-            int currentEntityIndex = 0;
 
-            // Process each entity
-            foreach (var entity in Entities)
+            // PERFORMANCE IMPROVEMENT: Process entities in parallel when safe to do so
+            // Note: We need to be careful with IfcStore thread-safety
+            var lockObject = new object();
+            
+            var tasks = Entities.Select(async (entity, index) =>
             {
-                currentEntityIndex++;
+                var currentEntityIndex = index + 1;
                 _logger.LogInformation($"Processing entity {currentEntityIndex}/{totalEntityCount}: {entity.Entity}");
                 
                 // Initialize objects for this specific entity
@@ -110,12 +112,19 @@ namespace IfcComparison.Models
                 
                 _logger.LogInformation($"Results for '{entity.Entity}': {oldNotInNewCount} removed objects, {newNotInOldCount} new objects, {comparedObjectsCount} compared objects");
 
-                // Combine the results
-                combinedResult.OldObjectsNotInNew.AddRange(tempComparer.IfcComparisonResult.OldObjectsNotInNew ?? new List<IfcObjectStorage>());
-                combinedResult.NewObjectsNotInOld.AddRange(tempComparer.IfcComparisonResult.NewObjectsNotInOld ?? new List<IfcObjectStorage>());
+                return new { Entity = entity, Result = tempComparer.IfcComparisonResult };
+            }).ToList();
 
-                // Merge the compared objects dictionaries
-                foreach (var kvp in tempComparer.IfcComparisonResult.ComparedIfcObjects ?? new Dictionary<IIfcObject, Dictionary<string, string>>())
+            // Wait for all tasks to complete
+            var results = await Task.WhenAll(tasks);
+
+            // Combine results (thread-safe)
+            foreach (var entityResult in results)
+            {
+                combinedResult.OldObjectsNotInNew.AddRange(entityResult.Result.OldObjectsNotInNew ?? new List<IfcObjectStorage>());
+                combinedResult.NewObjectsNotInOld.AddRange(entityResult.Result.NewObjectsNotInOld ?? new List<IfcObjectStorage>());
+                
+                foreach (var kvp in entityResult.Result.ComparedIfcObjects ?? new Dictionary<IIfcObject, Dictionary<string, string>>())
                 {
                     combinedResult.ComparedIfcObjects[kvp.Key] = kvp.Value;
                 }
@@ -275,8 +284,13 @@ namespace IfcComparison.Models
             {
                 _logger.LogInformation("Using property-based comparison");
                 
+                // PERFORMANCE IMPROVEMENT: Cache property sets to avoid repeated retrieval
+                var oldPropertySetsCache = new Dictionary<IIfcObject, List<IIfcPropertySet>>();
+                var newPropertySetsCache = new Dictionary<IIfcObject, List<IIfcPropertySet>>();
+                var requiredPSets = Entities.FirstOrDefault()?.IfcPropertySets;
+                
                 // Create lookup dictionaries to avoid nested loops
-                var oldObjectLookup = new Dictionary<string, List<KeyValuePair<IIfcObject, string>>>();
+                var oldObjectLookup = new Dictionary<string, List<IIfcObject>>();
 
                 // Step 1: Build a lookup for old objects based on comparison value
                 _logger.LogInformation("Building lookup dictionary for old objects");
@@ -288,9 +302,13 @@ namespace IfcComparison.Models
                         if (!string.IsNullOrEmpty(oldIdNomValue))
                         {
                             if (!oldObjectLookup.ContainsKey(oldIdNomValue))
-                                oldObjectLookup[oldIdNomValue] = new List<KeyValuePair<IIfcObject, string>>();
+                                oldObjectLookup[oldIdNomValue] = new List<IIfcObject>();
 
-                            oldObjectLookup[oldIdNomValue].Add(new KeyValuePair<IIfcObject, string>(oldIfcObj.Value, oldIdNomValue));
+                            oldObjectLookup[oldIdNomValue].Add(oldIfcObj.Value);
+                            
+                            // PERFORMANCE IMPROVEMENT: Cache property sets during lookup building
+                            if (!oldPropertySetsCache.ContainsKey(oldIfcObj.Value))
+                                oldPropertySetsCache[oldIfcObj.Value] = IfcTools.GetPropertySetsFromObject(oldIfcObj.Value, requiredPSets);
                         }
                     }
                 }
@@ -309,14 +327,18 @@ namespace IfcComparison.Models
                         if (string.IsNullOrEmpty(newIdNomValue))
                             continue;
 
+                        // PERFORMANCE IMPROVEMENT: Cache new property sets during comparison
+                        if (!newPropertySetsCache.ContainsKey(newIfcObj.Value))
+                            newPropertySetsCache[newIfcObj.Value] = IfcTools.GetPropertySetsFromObject(newIfcObj.Value, requiredPSets);
+
                         // Check if we have matching old objects
                         if (oldObjectLookup.TryGetValue(newIdNomValue, out var oldMatches))
                         {
-                            var newPsets = IfcTools.GetPropertySetsFromObject(newIfcObj.Value, Entities.FirstOrDefault()?.IfcPropertySets);
+                            var newPsets = newPropertySetsCache[newIfcObj.Value];
 
                             foreach (var oldMatch in oldMatches)
                             {
-                                var oldPsets = IfcTools.GetPropertySetsFromObject(oldMatch.Key, Entities.FirstOrDefault()?.IfcPropertySets);
+                                var oldPsets = oldPropertySetsCache[oldMatch];
 
                                 // Compare property sets between new and old objects
                                 CompareAndAddPropertySets(newIfcObj.Value, newPsets, oldPsets, result);
@@ -331,6 +353,11 @@ namespace IfcComparison.Models
             {
                 _logger.LogInformation("Using GlobalId-based comparison");
                 
+                // PERFORMANCE IMPROVEMENT: Cache property sets for Identifier comparison too
+                var oldPropertySetsCache = new Dictionary<IIfcObject, List<IIfcPropertySet>>();
+                var newPropertySetsCache = new Dictionary<IIfcObject, List<IIfcPropertySet>>();
+                var requiredPSets = Entities.FirstOrDefault()?.IfcPropertySets;
+                
                 // For Identifier comparison, we'll use the GlobalId directly
 
                 // Step 1: Build a lookup dictionary of old objects by their GlobalIds
@@ -344,6 +371,10 @@ namespace IfcComparison.Models
                         if (!oldObjectLookup.ContainsKey(oldIfcObj.Key))
                         {
                             oldObjectLookup[oldIfcObj.Key] = oldIfcObj.Value;
+                            
+                            // PERFORMANCE IMPROVEMENT: Cache property sets during lookup building
+                            if (!oldPropertySetsCache.ContainsKey(oldIfcObj.Value))
+                                oldPropertySetsCache[oldIfcObj.Value] = IfcTools.GetPropertySetsFromObject(oldIfcObj.Value, requiredPSets);
                         }
                     }
                 }
@@ -358,12 +389,16 @@ namespace IfcComparison.Models
                         // Get the GlobalId string value
                         string globalId = newIfcObj.Key;
 
+                        // PERFORMANCE IMPROVEMENT: Cache new property sets during comparison
+                        if (!newPropertySetsCache.ContainsKey(newIfcObj.Value))
+                            newPropertySetsCache[newIfcObj.Value] = IfcTools.GetPropertySetsFromObject(newIfcObj.Value, requiredPSets);
+
                         // Check if this GlobalId exists in the old objects
                         if (oldObjectLookup.TryGetValue(globalId, out var matchingOldObject))
                         {
                             // We have a match by GlobalId
-                            var newPsets = IfcTools.GetPropertySetsFromObject(newIfcObj.Value, Entities.FirstOrDefault()?.IfcPropertySets);
-                            var oldPsets = IfcTools.GetPropertySetsFromObject(matchingOldObject, Entities.FirstOrDefault()?.IfcPropertySets);
+                            var newPsets = newPropertySetsCache[newIfcObj.Value];
+                            var oldPsets = oldPropertySetsCache[matchingOldObject];
 
                             // Compare property sets between the new and old objects
                             CompareAndAddPropertySets(newIfcObj.Value, newPsets, oldPsets, result);
@@ -482,6 +517,7 @@ namespace IfcComparison.Models
 
         /// <summary>
         /// Method to check if IfcObjects in the old list are not present in the new list based on a comparison operator.
+        /// PERFORMANCE OPTIMIZED: Uses HashSet for O(1) lookups instead of O(n) nested loops
         /// </summary>
         /// <param name="oldObjects"></param>
         /// <param name="newObjects"></param>
@@ -493,24 +529,19 @@ namespace IfcComparison.Models
 
             if (comparisonEnumeration != ComparisonEnumeration.Identifier)
             {
+                // PERFORMANCE IMPROVEMENT: Build HashSet of new nominal values ONCE - O(n) instead of O(n²)
+                var newNominalValues = new HashSet<string>(
+                    newObjects.IfcStorageObjects
+                        .Select(obj => GetPropertyNominalValue(comparisonOperator, obj))
+                        .Where(val => !string.IsNullOrEmpty(val))
+                );
+
                 foreach (var oldObject in oldObjects.IfcStorageObjects)
                 {
                     var oldIdNomValue = GetPropertyNominalValue(comparisonOperator, oldObject);
-
-                    bool shouldAdd = true;
-                    foreach (var newObject in newObjects.IfcStorageObjects)
-                    {
-                        var newIdNomValue = GetPropertyNominalValue(comparisonOperator, newObject);
-
-                        // Compare the old and new objects based on the comparison operator
-                        if (oldIdNomValue == newIdNomValue)
-                        {
-                            // If they match we proceed to next object since we only want to find objects that are not in the other list
-                            shouldAdd = false;
-                            continue;
-                        }
-                    }
-                    if (shouldAdd)
+                    
+                    // O(1) lookup instead of O(n) loop
+                    if (!string.IsNullOrEmpty(oldIdNomValue) && !newNominalValues.Contains(oldIdNomValue))
                     {
                         result.Add(oldObject);
                         _logger.LogInformation($"Object with nominal value '{oldIdNomValue}' not found in {newOld} objects.");
@@ -519,33 +550,26 @@ namespace IfcComparison.Models
             }
             else
             {
-                // For Identifier comparison, we don't use nominal values
+                // PERFORMANCE IMPROVEMENT: Build HashSet of new GlobalIds ONCE
+                var newGlobalIds = new HashSet<string>(
+                    newObjects.IfcStorageObjects
+                        .SelectMany(obj => obj.IfcObjects.Keys.Select(k => k.ToString()))
+                );
+
                 foreach (var oldObject in oldObjects.IfcStorageObjects)
                 {
-                    var oldIdNomValues = oldObject.IfcObjects.Keys; // For Identifier comparison, we don't use nominal values
-                    bool shouldAdd = true;
-                    foreach (var newObject in newObjects.IfcStorageObjects)
-                    {
-                        var newIdNomValues = newObject.IfcObjects.Keys; // For Identifier comparison, we don't use nominal values
-                        // Compare the old and new objects based on the comparison operator
-                        if (oldIdNomValues.Intersect(newIdNomValues).Any())
-                        {
-                            // If they match we proceed to next object since we only want to find objects that are not in the other list
-                            shouldAdd = false;
-                            continue;
-                        }
-                    }
-                    if (shouldAdd)
+                    var oldIdNomValues = oldObject.IfcObjects.Keys.Select(k => k.ToString());
+                    
+                    // Check if any old GlobalId exists in new set
+                    if (!oldIdNomValues.Any(id => newGlobalIds.Contains(id)))
                     {
                         result.Add(oldObject);
-                        _logger.LogInformation($"Object with nominal value '{oldIdNomValues}' not found in {newOld} objects.");
-                        //_logger.LogInformation($"Object with nominal value '{oldIdNomValues}' not found in {newOld} objects");
+                        _logger.LogInformation($"Object not found in {newOld} objects.");
                     }
                 }
             }
 
-            await Task.Delay(1); // Simulate async operation, replace with actual comparison logic
-            return result;
+            return await Task.FromResult(result);
         }
     }
 }
