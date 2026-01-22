@@ -65,6 +65,9 @@
     <None Update="IfcComparisonSettings\DefaultSettings.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="IfcComparisonSettings\CliSettings.example.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <WCFMetadata Include="Connected Services\" />
@@ -99,6 +102,7 @@
     <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
     <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
     <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="8.0.1" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
     <PackageReference Include="Xbim.Common" Version="5.1.341" />
     <PackageReference Include="Xbim.Essentials" Version="5.1.341" />
     <PackageReference Include="Xbim.Ifc" Version="5.1.341" />
