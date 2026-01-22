@@ -526,9 +526,18 @@ namespace IfcComparison.ViewModels
                     cell = cellContent.Parent as DataGridCell;
                     if (cell != null)
                     {
-                        point = cell.PointToScreen(point);
-                        SearchWindow.Left = point.X;
-                        SearchWindow.Top = point.Y + cell.ActualHeight;
+                        // Get DPI scaling factors to handle non-100% Windows display scaling
+                        var source = System.Windows.PresentationSource.FromVisual(cell);
+                        if (source != null)
+                        {
+                            var dpiScaleX = source.CompositionTarget.TransformToDevice.M11;
+                            var dpiScaleY = source.CompositionTarget.TransformToDevice.M22;
+                            
+                            point = cell.PointToScreen(point);
+                            // Convert physical pixels back to DIPs for WPF window positioning
+                            SearchWindow.Left = point.X / dpiScaleX;
+                            SearchWindow.Top = point.Y / dpiScaleY + cell.ActualHeight;
+                        }
                     }
                 }
             }
