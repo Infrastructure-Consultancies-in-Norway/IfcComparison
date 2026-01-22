@@ -1,7 +1,7 @@
 ﻿# IfcComparison
 
-## Sub-project of COWI Bridge Toolbox
-[COWI Bridge Toolbox](http://git.cowiportal.com/Team-Bridges-Norway/COWI_Bridge_Toolbox_App)
+## Sub-project of InfraTools
+[InfraTools](https://github.com/Infrastructure-Consultancies-in-Norway/InfraTools/)
 
 ### Table of Contents
 
@@ -123,11 +123,11 @@ echo Comparison completed successfully!
 
 Use CTRL+F to get the search window to get the IfcEntity. Every entity got an extra letter "I" in front of it.
 
-![](http://git.cowiportal.com/Team-Bridges-Norway/COWI_Bridge_Toolbox_App/raw/branch/master/Documentation/Screenshot.png)
+![](https://i.imgur.com/JR7mD3l.png)
 
-![](http://git.cowiportal.com/Team-Bridges-Norway/COWI_Bridge_Toolbox_App/raw/branch/master/Documentation/Example.gif)
+![](https://i.imgur.com/Ek3XXZX.gif)
 
 ## Version Updates
 
 Changes are described here:
-[CHANGELOG](http://git.cowiportal.com/Team-Bridges-Norway/COWI_Bridge_Toolbox_App/src/branch/master/CHANGELOG.md)
+[CHANGELOG](https://github.com/Infrastructure-Consultancies-in-Norway/InfraTools/blob/master/CHANGELOG.md)
