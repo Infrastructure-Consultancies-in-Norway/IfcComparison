@@ -1,5 +1,7 @@
 ﻿using IfcComparison.Enumerations;
+using IfcComparison.Logging;
 using IfcComparison.ViewModels;
+using Microsoft.Extensions.Logging;
 using Microsoft.Isam.Esent.Interop;
 using System;
 using System.CodeDom;
@@ -26,6 +28,8 @@ using Xbim.Ifc4.PropertyResource;
 using Xbim.Ifc4.UtilityResource;
 using Xbim.IO.Esent;
 using Xbim.IO.Xml.BsConf;
+
+
 
 
 namespace IfcComparison.Models
@@ -152,12 +156,59 @@ namespace IfcComparison.Models
         }
         
         /// <summary>
-        /// Get the interface type from the string representation. Only IFC4 - works with IFC2x3 models as well. 
+        /// Converts a display name (e.g., "IfcBuildingElementProxy") to an interface name (e.g., "IIfcBuildingElementProxy")
         /// </summary>
-        /// <param name="interfaceName"></param>
-        /// <returns></returns>
-        public static Type GetInterfaceType(string interfaceName)
+        /// <param name="displayName">The display name without the leading 'I'</param>
+        /// <returns>The interface name with the leading 'I'</returns>
+        public static string DisplayNameToInterfaceName(string displayName)
         {
+            if (string.IsNullOrEmpty(displayName))
+                return displayName;
+
+            // If it already starts with "IIfc", return as-is (it's already an interface name)
+            if (displayName.StartsWith("IIfc", StringComparison.OrdinalIgnoreCase))
+                return displayName;
+
+            // If it starts with "Ifc" but not "IIfc", add the leading "I"
+            if (displayName.StartsWith("Ifc", StringComparison.OrdinalIgnoreCase))
+                return "I" + displayName;
+
+            // Otherwise, return as-is
+            return displayName;
+        }
+
+        /// <summary>
+        /// Converts an interface name (e.g., "IIfcBuildingElementProxy") to a display name (e.g., "IfcBuildingElementProxy")
+        /// </summary>
+        /// <param name="interfaceName">The interface name with the leading 'I'</param>
+        /// <returns>The display name without the leading 'I'</returns>
+        public static string InterfaceNameToDisplayName(string interfaceName)
+        {
+            if (string.IsNullOrEmpty(interfaceName))
+                return interfaceName;
+
+            // If it starts with "IIfc", remove the leading "I"
+            if (interfaceName.StartsWith("IIfc", StringComparison.OrdinalIgnoreCase))
+                return interfaceName.Substring(1);
+
+            // Otherwise, return as-is
+            return interfaceName;
+        }
+
+        /// <summary>
+        /// Get the interface type from the string representation. Only IFC4 - works with IFC2x3 models as well.
+        /// Supports both interface names (e.g., "IIfcBuildingElementProxy") and display names (e.g., "IfcBuildingElementProxy")
+        /// </summary>
+        /// <param name="name">The interface name or display name</param>
+        /// <returns></returns>
+        public static Type GetInterfaceType(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return null;
+
+            // Convert to interface name if it's a display name
+            string interfaceName = DisplayNameToInterfaceName(name);
+
             Type interfaceType = IfcEntities
                 .Where(n => n.Name == interfaceName)
                 .Where(n => n.FullName.Contains("Ifc4"))
@@ -937,6 +988,8 @@ namespace IfcComparison.Models
         }
 
 
+
+
         public static string GetComparisonNominalValue(IIfcObject ifcObject, string compOperator)
         {
             var result = string.Empty;
@@ -960,6 +1013,157 @@ namespace IfcComparison.Models
 
             return result;
         }
+
+        /// <summary>
+        /// PERFORMANCE: Builds a complete cache of Object → PropertySets mappings using forward lookups.
+        /// This avoids expensive IsDefinedBy inverse lookups for each object.
+        /// </summary>
+        public static Dictionary<IIfcObject, List<IIfcPropertySet>> BuildObjectToPropertySetsCache(
+            IfcStore model, 
+            List<string> requiredPSetNames,
+            Type targetEntityType = null)
+        {
+            var cache = new Dictionary<IIfcObject, List<IIfcPropertySet>>();
+            int totalObjectsChecked = 0;
+            int filteredOutCount = 0;
+            
+            // Single pass through all relationships - O(n) instead of O(n²)
+            foreach (var rel in model.Instances.OfType<IIfcRelDefinesByProperties>())
+            {
+                // Get property sets from this relationship that match our required names
+                var matchingPSets = rel.RelatingPropertyDefinition.PropertySetDefinitions
+                    .OfType<IIfcPropertySet>()
+                    .Where(ps => requiredPSetNames.Contains(ps.Name.ToString(), StringComparer.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (!matchingPSets.Any())
+                    continue;
+
+                // Add to cache for each related object
+                foreach (var obj in rel.RelatedObjects.OfType<IIfcObject>())
+                {
+                    totalObjectsChecked++;
+                    
+                    // Filter by target type if specified
+                    if (targetEntityType != null)
+                    {
+                        var objType = obj.GetType();
+                        var isMatch = targetEntityType.IsInstanceOfType(obj);
+                        
+                        if (!isMatch)
+                        {
+                            filteredOutCount++;
+                            continue;
+                        }
+                    }
+
+                    if (!cache.ContainsKey(obj))
+                        cache[obj] = new List<IIfcPropertySet>();
+
+                    foreach (var pset in matchingPSets)
+                    {
+                        if (!cache[obj].Contains(pset))
+                            cache[obj].Add(pset);
+                    }
+                }
+            }
+
+            // Log filter statistics for debugging
+            var logger = IfcComparison.Logging.LoggingService.CreateLogger(typeof(IfcTools).FullName);
+            logger.LogInformation($"BuildObjectToPropertySetsCache: Checked {totalObjectsChecked} objects, filtered out {filteredOutCount}, kept {cache.Count}. TargetType: {targetEntityType?.Name ?? "NULL"}");
+
+            return cache;
+        }
+
+        /// <summary>
+        /// PERFORMANCE: Builds a lookup of ComparisonValue → Objects using forward lookups.
+        /// Returns both the lookup and a cache of Object → PropertySets for later use.
+        /// The comparison value is extracted PER OBJECT to ensure correct matching.
+        /// </summary>
+        public static (Dictionary<string, List<IIfcObject>> ObjectLookup, Dictionary<IIfcObject, List<IIfcPropertySet>> PropertySetsCache) 
+            BuildComparisonLookupWithPropertySets(
+                IfcStore model, 
+                string comparisonOperator,
+                List<string> requiredPSetNames,
+                Type targetEntityType = null)
+        {
+            var objectLookup = new Dictionary<string, List<IIfcObject>>();
+            var propertySetsCache = new Dictionary<IIfcObject, List<IIfcPropertySet>>();
+
+            // First, build a complete object-to-propertysets cache
+            var allObjectPSets = BuildObjectToPropertySetsCache(model, requiredPSetNames, targetEntityType);
+
+            // Now process each object and extract its comparison value
+            foreach (var kvp in allObjectPSets)
+            {
+                var obj = kvp.Key;
+                var psets = kvp.Value;
+
+                // Cache property sets for this object
+                propertySetsCache[obj] = psets;
+
+                // Find the comparison value from this object's property sets
+                string comparisonValue = null;
+                foreach (var pset in psets)
+                {
+                    var prop = pset.HasProperties
+                        .OfType<IIfcPropertySingleValue>()
+                        .FirstOrDefault(p => p.Name.ToString().Contains(comparisonOperator));
+                    
+                    if (prop?.NominalValue != null)
+                    {
+                        comparisonValue = prop.NominalValue.ToString();
+                        break;
+                    }
+                }
+
+                // Add to lookup if we have a comparison value
+                if (!string.IsNullOrEmpty(comparisonValue))
+                {
+                    if (!objectLookup.ContainsKey(comparisonValue))
+                        objectLookup[comparisonValue] = new List<IIfcObject>();
+                    
+                    if (!objectLookup[comparisonValue].Contains(obj))
+                        objectLookup[comparisonValue].Add(obj);
+                }
+            }
+
+            return (objectLookup, propertySetsCache);
+        }
+
+        /// <summary>
+        /// PERFORMANCE: Builds a lookup of GlobalId → Object with property sets cache using forward lookups.
+        /// </summary>
+        public static (Dictionary<string, IIfcObject> ObjectLookup, Dictionary<IIfcObject, List<IIfcPropertySet>> PropertySetsCache) 
+            BuildGlobalIdLookupWithPropertySets(
+                IfcStore model, 
+                List<string> requiredPSetNames,
+                Type targetEntityType = null)
+        {
+            var objectLookup = new Dictionary<string, IIfcObject>();
+            var propertySetsCache = new Dictionary<IIfcObject, List<IIfcPropertySet>>();
+
+            // Use the object-to-propertysets cache builder
+            var allObjectPSets = BuildObjectToPropertySetsCache(model, requiredPSetNames, targetEntityType);
+
+            foreach (var kvp in allObjectPSets)
+            {
+                var obj = kvp.Key;
+                var psets = kvp.Value;
+                var globalId = obj.GlobalId.ToString();
+
+                // Add to GlobalId lookup
+                if (!objectLookup.ContainsKey(globalId))
+                    objectLookup[globalId] = obj;
+
+                // Cache property sets for this object
+                propertySetsCache[obj] = psets;
+            }
+
+            return (objectLookup, propertySetsCache);
+        }
+
+
 
         private static void CreateQAPropSet(IfcStore model, List<IPersistEntity> instances, string newPropSetName, string propSetName)
         {
