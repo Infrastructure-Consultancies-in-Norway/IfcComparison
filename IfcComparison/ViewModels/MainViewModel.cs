@@ -186,6 +186,8 @@ namespace IfcComparison.ViewModels
 
         private void GetEntities()
         {
+            // This method is called during initialization to ensure IfcTools.IfcEntities is populated
+            // The entities list is accessed statically when needed for the search window
             var entities = IfcTools.IfcEntities;
         }
 
@@ -259,6 +261,12 @@ namespace IfcComparison.ViewModels
                                     this.DataGridContentIFCEntities.Clear();
                                     foreach (var item in (ICollection<IfcEntity>)uSetval)
                                     {
+                                        // Normalize entity names to interface format (with leading "I")
+                                        // This ensures backward compatibility with old settings that may have either format
+                                        if (!string.IsNullOrEmpty(item.Entity))
+                                        {
+                                            item.Entity = IfcTools.DisplayNameToInterfaceName(item.Entity);
+                                        }
                                         this.DataGridContentIFCEntities.Add(item);
                                     }
                                 }

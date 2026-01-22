@@ -156,12 +156,59 @@ namespace IfcComparison.Models
         }
         
         /// <summary>
-        /// Get the interface type from the string representation. Only IFC4 - works with IFC2x3 models as well. 
+        /// Converts a display name (e.g., "IfcBuildingElementProxy") to an interface name (e.g., "IIfcBuildingElementProxy")
         /// </summary>
-        /// <param name="interfaceName"></param>
-        /// <returns></returns>
-        public static Type GetInterfaceType(string interfaceName)
+        /// <param name="displayName">The display name without the leading 'I'</param>
+        /// <returns>The interface name with the leading 'I'</returns>
+        public static string DisplayNameToInterfaceName(string displayName)
         {
+            if (string.IsNullOrEmpty(displayName))
+                return displayName;
+
+            // If it already starts with "IIfc", return as-is (it's already an interface name)
+            if (displayName.StartsWith("IIfc", StringComparison.OrdinalIgnoreCase))
+                return displayName;
+
+            // If it starts with "Ifc" but not "IIfc", add the leading "I"
+            if (displayName.StartsWith("Ifc", StringComparison.OrdinalIgnoreCase))
+                return "I" + displayName;
+
+            // Otherwise, return as-is
+            return displayName;
+        }
+
+        /// <summary>
+        /// Converts an interface name (e.g., "IIfcBuildingElementProxy") to a display name (e.g., "IfcBuildingElementProxy")
+        /// </summary>
+        /// <param name="interfaceName">The interface name with the leading 'I'</param>
+        /// <returns>The display name without the leading 'I'</returns>
+        public static string InterfaceNameToDisplayName(string interfaceName)
+        {
+            if (string.IsNullOrEmpty(interfaceName))
+                return interfaceName;
+
+            // If it starts with "IIfc", remove the leading "I"
+            if (interfaceName.StartsWith("IIfc", StringComparison.OrdinalIgnoreCase))
+                return interfaceName.Substring(1);
+
+            // Otherwise, return as-is
+            return interfaceName;
+        }
+
+        /// <summary>
+        /// Get the interface type from the string representation. Only IFC4 - works with IFC2x3 models as well.
+        /// Supports both interface names (e.g., "IIfcBuildingElementProxy") and display names (e.g., "IfcBuildingElementProxy")
+        /// </summary>
+        /// <param name="name">The interface name or display name</param>
+        /// <returns></returns>
+        public static Type GetInterfaceType(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return null;
+
+            // Convert to interface name if it's a display name
+            string interfaceName = DisplayNameToInterfaceName(name);
+
             Type interfaceType = IfcEntities
                 .Where(n => n.Name == interfaceName)
                 .Where(n => n.FullName.Contains("Ifc4"))

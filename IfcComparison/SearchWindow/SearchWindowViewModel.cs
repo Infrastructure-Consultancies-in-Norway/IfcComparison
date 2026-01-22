@@ -68,7 +68,9 @@ namespace IfcComparison
             var obsCol = new ObservableCollection<string>();
             foreach (Type type in IfcTools.IfcEntities)
             {
-                obsCol.Add(type.Name);
+                // Display entity names without the leading "I" for better readability
+                string displayName = IfcTools.InterfaceNameToDisplayName(type.Name);
+                obsCol.Add(displayName);
             }
 
             return obsCol;
@@ -94,7 +96,12 @@ namespace IfcComparison
                             }
                             var curObj = curCell.Item as IfcEntity;
                             if (curObj == null) { curObj = new IfcEntity(); }
-                            if (SelectedItem != null){ curObj.Entity = SelectedItem.ToString(); }
+                            if (SelectedItem != null)
+                            { 
+                                // Convert display name to interface name for internal storage
+                                string interfaceName = IfcTools.DisplayNameToInterfaceName(SelectedItem.ToString());
+                                curObj.Entity = interfaceName; 
+                            }
                             cell.IsEditing = false;
                             cell.Focus();
                         }
