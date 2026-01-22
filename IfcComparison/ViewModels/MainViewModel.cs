@@ -186,6 +186,8 @@ namespace IfcComparison.ViewModels
 
         private void GetEntities()
         {
+            // This method is called during initialization to ensure IfcTools.IfcEntities is populated
+            // The entities list is accessed statically when needed for the search window
             var entities = IfcTools.IfcEntities;
         }
 
@@ -259,6 +261,12 @@ namespace IfcComparison.ViewModels
                                     this.DataGridContentIFCEntities.Clear();
                                     foreach (var item in (ICollection<IfcEntity>)uSetval)
                                     {
+                                        // Normalize entity names to interface format (with leading "I")
+                                        // This ensures backward compatibility with old settings that may have either format
+                                        if (!string.IsNullOrEmpty(item.Entity))
+                                        {
+                                            item.Entity = IfcTools.DisplayNameToInterfaceName(item.Entity);
+                                        }
                                         this.DataGridContentIFCEntities.Add(item);
                                     }
                                 }
@@ -518,9 +526,18 @@ namespace IfcComparison.ViewModels
                     cell = cellContent.Parent as DataGridCell;
                     if (cell != null)
                     {
-                        point = cell.PointToScreen(point);
-                        SearchWindow.Left = point.X;
-                        SearchWindow.Top = point.Y + cell.ActualHeight;
+                        // Get DPI scaling factors to handle non-100% Windows display scaling
+                        var source = System.Windows.PresentationSource.FromVisual(cell);
+                        if (source != null)
+                        {
+                            var dpiScaleX = source.CompositionTarget.TransformToDevice.M11;
+                            var dpiScaleY = source.CompositionTarget.TransformToDevice.M22;
+                            
+                            point = cell.PointToScreen(point);
+                            // Convert physical pixels back to DIPs for WPF window positioning
+                            SearchWindow.Left = point.X / dpiScaleX;
+                            SearchWindow.Top = point.Y / dpiScaleY + cell.ActualHeight;
+                        }
                     }
                 }
             }

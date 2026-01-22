@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Xbim.Common;
 using Xbim.Ifc;
 using Xbim.Ifc4.Interfaces;
+using Xbim.Ifc4.UtilityResource;
 
 namespace IfcComparison.Models
 {
@@ -34,85 +35,115 @@ namespace IfcComparison.Models
             logger.LogInformation("Creating IfcComparerObjects for entity type: {EntityType}", entity?.Entity ?? "Unknown");
             
             var instance = new IfcComparerObjects(ifcModel, entity);
-            await instance.InitializeIfcObjects();
+            await instance.InitializeIfcObjectsOptimized();
             return instance;
         }
 
-        private async Task InitializeIfcObjects()
+        /// <summary>
+        /// OPTIMIZED: Single-pass initialization using forward lookups.
+        /// Instead of iterating through each property set and querying relationships,
+        /// we iterate through relationships once and group by property set.
+        /// </summary>
+        private async Task InitializeIfcObjectsOptimized()
         {
-            _logger.LogInformation("Initializing IFC objects for {EntityType}", Entity?.Entity ?? "Unknown");
+            _logger.LogInformation("Initializing IFC objects for {EntityType} using OPTIMIZED single-pass method", Entity?.Entity ?? "Unknown");
             
             try
             {
-                // Get all property sets from the IfcComparerModel
-                var ifcPropertySets = IfcComparerModel.Instances.OfType<IIfcPropertySet>();
-                _logger.LogDebug("Found {Count} property sets in the model", ifcPropertySets.Count());
+                var requiredPSetNames = Entity?.IfcPropertySets ?? new List<string>();
+                var targetType = IfcTools.GetInterfaceType(Entity?.Entity);
+                var comparisonOperator = Entity?.ComparisonOperator ?? string.Empty;
+                var comparisonMethod = Entity?.ComparisonMethod ?? string.Empty;
+                
+                _logger.LogDebug("Looking for property sets: {PSets}, Target type: {Type}", 
+                    string.Join(", ", requiredPSetNames), targetType?.Name ?? "null");
 
-                // Use the property set from the entity, which is a list of string, to filter the objects from ifcPropertySets
-                var filteredPropertySets = ifcPropertySets
-                    .Where(ps =>
-                        !string.IsNullOrEmpty(ps.Name) &&
-                        Entity.IfcPropertySets != null &&
-                        Entity.IfcPropertySets.Any(set => string.Equals(set, ps.Name, StringComparison.OrdinalIgnoreCase)))
-                    .ToList();
+                // Dictionary to group objects by property set
+                // Key: PropertySet, Value: (Objects dictionary, ComparisonId)
+                var psetToObjects = new Dictionary<IIfcPropertySet, Dictionary<IfcGloballyUniqueId, IIfcObject>>();
+                var psetToComparisonId = new Dictionary<IIfcPropertySet, string>();
 
-                _logger.LogDebug("Filtered to {Count} property sets that match criteria", filteredPropertySets.Count);
+                // SINGLE PASS through all relationships
+                var allRelationships = IfcComparerModel.Instances.OfType<IIfcRelDefinesByProperties>().ToList();
+                _logger.LogDebug("Processing {Count} relationships in single pass", allRelationships.Count);
 
-                // PERFORMANCE IMPROVEMENT: Build relationship cache ONCE before processing property sets
-                var relationshipCache = BuildRelationshipCache();
-
-                foreach (var propertySet in filteredPropertySets)
+                foreach (var rel in allRelationships)
                 {
-                    // Create a new IfcObjectStorage for each property set and add it to the list
-                    _logger.LogTrace("Processing property set: {PropertySetName}", propertySet.Name);
-                    var ifcObjectStorage = new IfcObjectStorage(propertySet, IfcComparerModel, Entity, relationshipCache);
+                    // Get matching property sets from this relationship
+                    var matchingPSets = rel.RelatingPropertyDefinition.PropertySetDefinitions
+                        .OfType<IIfcPropertySet>()
+                        .Where(ps => !string.IsNullOrEmpty(ps.Name) && 
+                                     requiredPSetNames.Any(name => string.Equals(name, ps.Name, StringComparison.OrdinalIgnoreCase)))
+                        .ToList();
 
-                    // Check if the IfcObjectStorage is not null before adding it to the list
-                    if (ifcObjectStorage != null && ifcObjectStorage.IfcObjects.Count > 0)
+                    if (!matchingPSets.Any())
+                        continue;
+
+                    // Get related objects filtered by target type
+                    var filteredObjects = rel.RelatedObjects
+                        .Where(obj => targetType == null || targetType.IsInstanceOfType(obj))
+                        .OfType<IIfcObject>()
+                        .ToList();
+
+                    if (!filteredObjects.Any())
+                        continue;
+
+                    // For each matching property set, add the objects
+                    foreach (var pset in matchingPSets)
                     {
-                        _logger.LogDebug("Adding storage with {Count} objects for property set {PropertySetName}", 
-                            ifcObjectStorage.IfcObjects.Count, propertySet.Name);
-                        IfcStorageObjects.Add(ifcObjectStorage);
-                    }
-                    else
-                    {
-                        _logger.LogDebug("No objects found for property set {PropertySetName}", propertySet.Name);
+                        if (!psetToObjects.ContainsKey(pset))
+                        {
+                            psetToObjects[pset] = new Dictionary<IfcGloballyUniqueId, IIfcObject>();
+                            
+                            // Extract comparison ID from this property set (do it once per pset)
+                            if (comparisonMethod != nameof(IfcComparison.Enumerations.ComparisonEnumeration.Identifier))
+                            {
+                                var comparisonValue = pset.HasProperties
+                                    .OfType<IIfcPropertySingleValue>()
+                                    .FirstOrDefault(p => p.Name.ToString().Contains(comparisonOperator))
+                                    ?.NominalValue?.ToString() ?? string.Empty;
+                                psetToComparisonId[pset] = comparisonValue;
+                            }
+                        }
+
+                        // Add objects to this property set's collection
+                        foreach (var obj in filteredObjects)
+                        {
+                            psetToObjects[pset][obj.GlobalId] = obj;
+                        }
                     }
                 }
 
-                _logger.LogInformation("Successfully initialized {Count} IFC storage objects", IfcStorageObjects.Count);
+                _logger.LogDebug("Found {Count} unique property sets with matching objects", psetToObjects.Count);
+
+                // Create IfcObjectStorage instances from the grouped data
+                foreach (var kvp in psetToObjects)
+                {
+                    var pset = kvp.Key;
+                    var objects = kvp.Value;
+                    
+                    if (objects.Count > 0)
+                    {
+                        var storage = new IfcObjectStorage
+                        {
+                            PropertySet = pset,
+                            IfcObjects = objects,
+                            ComparisonId = psetToComparisonId.TryGetValue(pset, out var compId) ? compId : string.Empty
+                        };
+                        
+                        IfcStorageObjects.Add(storage);
+                    }
+                }
+
+                _logger.LogInformation("Successfully initialized {Count} IFC storage objects with optimized single-pass method", IfcStorageObjects.Count);
                 
-                // Add a small delay to ensure this is truly async since the method is async
-                // and we don't have any real async operations here
-                await Task.Delay(1);
+                await Task.CompletedTask;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error initializing IFC objects: {Message}", ex.Message);
                 throw;
             }
-        }
-
-        private Dictionary<int, List<IIfcRelDefinesByProperties>> BuildRelationshipCache()
-        {
-            _logger.LogDebug("Building relationship cache for performance optimization");
-            var cache = new Dictionary<int, List<IIfcRelDefinesByProperties>>();
-            var allRelationships = IfcComparerModel.Instances.OfType<IIfcRelDefinesByProperties>().ToList();
-            _logger.LogDebug("Found {Count} total relationships to cache", allRelationships.Count);
-            
-            foreach (var rel in allRelationships)
-            {
-                if (rel.RelatingPropertyDefinition != null)
-                {
-                    var entityLabel = ((IPersistEntity)rel.RelatingPropertyDefinition).EntityLabel;
-                    if (!cache.ContainsKey(entityLabel))
-                        cache[entityLabel] = new List<IIfcRelDefinesByProperties>();
-                    cache[entityLabel].Add(rel);
-                }
-            }
-            
-            _logger.LogDebug("Cached relationships for {Count} unique property definitions", cache.Count);
-            return cache;
         }
     }
 }

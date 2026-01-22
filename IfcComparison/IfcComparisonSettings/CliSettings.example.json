@@ -1,0 +1,28 @@
+{
+  "FilePathOldIFC": "path/to/old_model.ifc",
+  "FilePathNewIFC": "path/to/new_model.ifc",
+  "FilePathIFCToQA": "path/to/output/qa_model.ifc",
+  "DataGridContentIFCEntities": [
+    {
+      "PSetName": "QA_REBAR",
+      "Entity": "IIfcReinforcingBar",
+      "IfcPropertySets": [ "MERKNADER" ],
+      "ComparisonOperator": "K200",
+      "ComparisonMethod": "Contains"
+    },
+    {
+      "PSetName": "QA_PROXY",
+      "Entity": "IIfcBuildingElementProxy",
+      "IfcPropertySets": [ "MERKNADER" ],
+      "ComparisonOperator": "K001",
+      "ComparisonMethod": "Contains"
+    },
+    {
+      "PSetName": "QA_BEAM",
+      "Entity": "IIfcBeam",
+      "IfcPropertySets": [ "MERKNADER" ],
+      "ComparisonOperator": "K001",
+      "ComparisonMethod": "Contains"
+    }
+  ]
+}

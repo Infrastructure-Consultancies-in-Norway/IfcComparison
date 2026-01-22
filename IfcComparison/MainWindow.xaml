@@ -10,6 +10,7 @@
         MinWidth="1400" MinHeight="500" >
     <UserControl.Resources>
         <converters:CollectionToStringConverter x:Key="CollectionToStringConverter"/>
+        <converters:InterfaceNameConverter x:Key="InterfaceNameConverter"/>
     </UserControl.Resources>
     <UserControl.Background>
         <SolidColorBrush Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}"/>
@@ -68,7 +69,13 @@
             </DataGrid.InputBindings>
             <DataGrid.Columns>
                 <DataGridTextColumn MinWidth="100" Header="PSet Name" Binding="{Binding PSetName, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" x:Name="PSetNameCol" />
-                <DataGridTextColumn MinWidth="100" Header="IFC Entity" Binding="{Binding Entity, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" x:Name="IFCEntityCol" />
+                <DataGridTextColumn MinWidth="100" Header="IFC Entity" Binding="{Binding Entity, Converter={StaticResource InterfaceNameConverter}, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" x:Name="IFCEntityCol">
+                    <DataGridTextColumn.CellStyle>
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="ToolTip" Value="Press Ctrl+F to search entities"/>
+                        </Style>
+                    </DataGridTextColumn.CellStyle>
+                </DataGridTextColumn>
                 <DataGridTextColumn MinWidth="100" Header="IFC Property Set Name" 
                                     Binding="{Binding IfcPropertySets, Converter={StaticResource CollectionToStringConverter}, 
                                     UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"/>

@@ -279,69 +279,58 @@ namespace IfcComparison.Models
             _logger.LogInformation($"Starting property comparison using {comparisonEnumeration} method");
             
             var result = new Dictionary<IIfcObject, Dictionary<string, string>>();
+            var requiredPSets = Entities.FirstOrDefault()?.IfcPropertySets;
+            var entity = Entities.FirstOrDefault();
+            var targetEntityType = entity != null ? IfcTools.GetInterfaceType(entity.Entity) : null;
+
+            _logger.LogInformation($"Target entity type: {targetEntityType?.FullName ?? "NULL"}, Entity name: {entity?.Entity ?? "NULL"}");
 
             if (comparisonEnumeration != ComparisonEnumeration.Identifier)
             {
-                _logger.LogInformation("Using property-based comparison");
+                _logger.LogInformation("Using property-based comparison with OPTIMIZED forward lookups");
                 
-                // PERFORMANCE IMPROVEMENT: Cache property sets to avoid repeated retrieval
-                var oldPropertySetsCache = new Dictionary<IIfcObject, List<IIfcPropertySet>>();
-                var newPropertySetsCache = new Dictionary<IIfcObject, List<IIfcPropertySet>>();
-                var requiredPSets = Entities.FirstOrDefault()?.IfcPropertySets;
-                
-                // Create lookup dictionaries to avoid nested loops
-                var oldObjectLookup = new Dictionary<string, List<IIfcObject>>();
+                // PERFORMANCE OPTIMIZATION: Build lookups using forward relationships (PropertySet → Objects)
+                // This is O(n) instead of O(n²) when using inverse IsDefinedBy lookups
+                _logger.LogInformation("Building optimized lookup for old model using forward relationships...");
+                var (oldObjectLookup, oldPropertySetsCache) = IfcTools.BuildComparisonLookupWithPropertySets(
+                    OldModel, 
+                    comparisonOperator, 
+                    requiredPSets, 
+                    targetEntityType);
+                _logger.LogInformation($"Created lookup with {oldObjectLookup.Count} unique values and {oldPropertySetsCache.Count} objects from old model");
 
-                // Step 1: Build a lookup for old objects based on comparison value
-                _logger.LogInformation("Building lookup dictionary for old objects");
-                foreach (var oldObject in oldObjects.IfcStorageObjects)
-                {
-                    foreach (var oldIfcObj in oldObject.IfcObjects)
-                    {
-                        var oldIdNomValue = IfcTools.GetComparisonNominalValue(oldIfcObj.Value, comparisonOperator);
-                        if (!string.IsNullOrEmpty(oldIdNomValue))
-                        {
-                            if (!oldObjectLookup.ContainsKey(oldIdNomValue))
-                                oldObjectLookup[oldIdNomValue] = new List<IIfcObject>();
+                _logger.LogInformation("Building optimized lookup for new model using forward relationships...");
+                var (newObjectLookup, newPropertySetsCache) = IfcTools.BuildComparisonLookupWithPropertySets(
+                    NewModelQA, 
+                    comparisonOperator, 
+                    requiredPSets, 
+                    targetEntityType);
+                _logger.LogInformation($"Created lookup with {newObjectLookup.Count} unique values and {newPropertySetsCache.Count} objects from new model");
 
-                            oldObjectLookup[oldIdNomValue].Add(oldIfcObj.Value);
-                            
-                            // PERFORMANCE IMPROVEMENT: Cache property sets during lookup building
-                            if (!oldPropertySetsCache.ContainsKey(oldIfcObj.Value))
-                                oldPropertySetsCache[oldIfcObj.Value] = IfcTools.GetPropertySetsFromObject(oldIfcObj.Value, requiredPSets);
-                        }
-                    }
-                }
-                _logger.LogInformation($"Created lookup with {oldObjectLookup.Count} unique values from old model");
-
-                // Step 2: Process new objects and compare with old ones using the lookup
+                // Step 2: Compare objects using the pre-built lookups
                 int matchCount = 0;
-                _logger.LogInformation("Comparing new objects against old objects");
-                foreach (var newObject in newObjects.IfcStorageObjects)
+                _logger.LogInformation("Comparing new objects against old objects using cached data");
+                
+                foreach (var kvp in newObjectLookup)
                 {
-                    foreach (var newIfcObj in newObject.IfcObjects)
+                    var comparisonValue = kvp.Key;
+                    var newIfcObjects = kvp.Value;
+
+                    // Check if we have matching old objects
+                    if (oldObjectLookup.TryGetValue(comparisonValue, out var oldMatches))
                     {
-                        var newIdNomValue = IfcTools.GetComparisonNominalValue(newIfcObj.Value, comparisonOperator);
-
-                        // Skip if no nominal value found
-                        if (string.IsNullOrEmpty(newIdNomValue))
-                            continue;
-
-                        // PERFORMANCE IMPROVEMENT: Cache new property sets during comparison
-                        if (!newPropertySetsCache.ContainsKey(newIfcObj.Value))
-                            newPropertySetsCache[newIfcObj.Value] = IfcTools.GetPropertySetsFromObject(newIfcObj.Value, requiredPSets);
-
-                        // Check if we have matching old objects
-                        if (oldObjectLookup.TryGetValue(newIdNomValue, out var oldMatches))
+                        foreach (var newIfcObj in newIfcObjects)
                         {
-                            var newPsets = newPropertySetsCache[newIfcObj.Value];
+                            if (!newPropertySetsCache.TryGetValue(newIfcObj, out var newPsets))
+                                continue;
 
                             foreach (var oldMatch in oldMatches)
                             {
-                                var oldPsets = oldPropertySetsCache[oldMatch];
+                                if (!oldPropertySetsCache.TryGetValue(oldMatch, out var oldPsets))
+                                    continue;
 
                                 // Compare property sets between new and old objects
-                                CompareAndAddPropertySets(newIfcObj.Value, newPsets, oldPsets, result);
+                                CompareAndAddPropertySets(newIfcObj, newPsets, oldPsets, result);
                                 matchCount++;
                             }
                         }
@@ -351,66 +340,49 @@ namespace IfcComparison.Models
             }
             else
             {
-                _logger.LogInformation("Using GlobalId-based comparison");
+                _logger.LogInformation("Using GlobalId-based comparison with OPTIMIZED forward lookups");
                 
-                // PERFORMANCE IMPROVEMENT: Cache property sets for Identifier comparison too
-                var oldPropertySetsCache = new Dictionary<IIfcObject, List<IIfcPropertySet>>();
-                var newPropertySetsCache = new Dictionary<IIfcObject, List<IIfcPropertySet>>();
-                var requiredPSets = Entities.FirstOrDefault()?.IfcPropertySets;
-                
-                // For Identifier comparison, we'll use the GlobalId directly
-
-                // Step 1: Build a lookup dictionary of old objects by their GlobalIds
-                var oldObjectLookup = new Dictionary<string, IIfcObject>();
-
-                foreach (var oldObject in oldObjects.IfcStorageObjects)
-                {
-                    foreach (var oldIfcObj in oldObject.IfcObjects)
-                    {
-                        // Use the GlobalId string as the key
-                        if (!oldObjectLookup.ContainsKey(oldIfcObj.Key))
-                        {
-                            oldObjectLookup[oldIfcObj.Key] = oldIfcObj.Value;
-                            
-                            // PERFORMANCE IMPROVEMENT: Cache property sets during lookup building
-                            if (!oldPropertySetsCache.ContainsKey(oldIfcObj.Value))
-                                oldPropertySetsCache[oldIfcObj.Value] = IfcTools.GetPropertySetsFromObject(oldIfcObj.Value, requiredPSets);
-                        }
-                    }
-                }
+                // PERFORMANCE OPTIMIZATION: Build lookups using forward relationships
+                _logger.LogInformation("Building optimized GlobalId lookup for old model...");
+                var (oldObjectLookup, oldPropertySetsCache) = IfcTools.BuildGlobalIdLookupWithPropertySets(
+                    OldModel, 
+                    requiredPSets, 
+                    targetEntityType);
                 _logger.LogInformation($"Created lookup with {oldObjectLookup.Count} objects from old model by GlobalId");
 
-                // Step 2: Process new objects and compare with old ones using GlobalId
+                _logger.LogInformation("Building optimized GlobalId lookup for new model...");
+                var (newObjectLookup, newPropertySetsCache) = IfcTools.BuildGlobalIdLookupWithPropertySets(
+                    NewModelQA, 
+                    requiredPSets, 
+                    targetEntityType);
+                _logger.LogInformation($"Created lookup with {newObjectLookup.Count} objects from new model by GlobalId");
+
+                // Step 2: Compare objects using GlobalId lookups
                 int matchCount = 0;
-                foreach (var newObject in newObjects.IfcStorageObjects)
+                foreach (var kvp in newObjectLookup)
                 {
-                    foreach (var newIfcObj in newObject.IfcObjects)
+                    var globalId = kvp.Key;
+                    var newIfcObj = kvp.Value;
+
+                    if (!newPropertySetsCache.TryGetValue(newIfcObj, out var newPsets))
+                        continue;
+
+                    // Check if this GlobalId exists in the old objects
+                    if (oldObjectLookup.TryGetValue(globalId, out var matchingOldObject))
                     {
-                        // Get the GlobalId string value
-                        string globalId = newIfcObj.Key;
+                        if (!oldPropertySetsCache.TryGetValue(matchingOldObject, out var oldPsets))
+                            continue;
 
-                        // PERFORMANCE IMPROVEMENT: Cache new property sets during comparison
-                        if (!newPropertySetsCache.ContainsKey(newIfcObj.Value))
-                            newPropertySetsCache[newIfcObj.Value] = IfcTools.GetPropertySetsFromObject(newIfcObj.Value, requiredPSets);
-
-                        // Check if this GlobalId exists in the old objects
-                        if (oldObjectLookup.TryGetValue(globalId, out var matchingOldObject))
-                        {
-                            // We have a match by GlobalId
-                            var newPsets = newPropertySetsCache[newIfcObj.Value];
-                            var oldPsets = oldPropertySetsCache[matchingOldObject];
-
-                            // Compare property sets between the new and old objects
-                            CompareAndAddPropertySets(newIfcObj.Value, newPsets, oldPsets, result);
-                            matchCount++;
-                        }
+                        // Compare property sets between the new and old objects
+                        CompareAndAddPropertySets(newIfcObj, newPsets, oldPsets, result);
+                        matchCount++;
                     }
                 }
                 _logger.LogInformation($"Completed comparison with {matchCount} GlobalId matches");
             }
 
             _logger.LogInformation($"Property comparison complete with {result.Count} results");
-            await Task.Delay(1); // Simulate async operation
+            await Task.CompletedTask; // No need for artificial delay
             return result;
         }
 
