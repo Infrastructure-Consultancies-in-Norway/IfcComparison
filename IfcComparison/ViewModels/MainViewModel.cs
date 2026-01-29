@@ -149,6 +149,9 @@ namespace IfcComparison.ViewModels
 
         public MainViewModel()
         {
+
+            // TODO: Check if files is stored in OneDrive. If so, warn user of possible issues of processes taking the file lock.
+
             var compList = Enum.GetNames(typeof(ComparisonEnumeration))
                 .Cast<string>().ToList();
             foreach (var item in compList)
