@@ -495,6 +495,20 @@ namespace IfcComparison.Models
 
             }
 
+            // Detect properties that existed in the old revision but are missing from the new revision
+            if (oldPropertySet != null)
+            {
+                foreach (var oldProperty in oldPropertySet.OfType<IIfcPropertySingleValue>())
+                {
+                    var propName = oldProperty.Name.ToString();
+                    if (!result.ContainsKey(propName))
+                    {
+                        var oldValue = oldProperty.NominalValue?.ToString() ?? "<null>";
+                        result[propName] = $"Missing \"{oldValue}\"";
+                    }
+                }
+            }
+
             return result;
         }
 
