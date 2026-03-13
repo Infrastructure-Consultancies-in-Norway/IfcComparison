@@ -1017,6 +1017,7 @@ namespace IfcComparison.Models
         /// <summary>
         /// PERFORMANCE: Builds a complete cache of Object → PropertySets mappings using forward lookups.
         /// This avoids expensive IsDefinedBy inverse lookups for each object.
+        /// When <paramref name="requiredPSetNames"/> is null or empty, ALL PSets are included (no name filter).
         /// </summary>
         public static Dictionary<IIfcObject, List<IIfcPropertySet>> BuildObjectToPropertySetsCache(
             IfcStore model, 
@@ -1026,15 +1027,26 @@ namespace IfcComparison.Models
             var cache = new Dictionary<IIfcObject, List<IIfcPropertySet>>();
             int totalObjectsChecked = 0;
             int filteredOutCount = 0;
+            bool filterByPSetName = requiredPSetNames != null && requiredPSetNames.Count > 0;
             
             // Single pass through all relationships - O(n) instead of O(n²)
             foreach (var rel in model.Instances.OfType<IIfcRelDefinesByProperties>())
             {
-                // Get property sets from this relationship that match our required names
-                var matchingPSets = rel.RelatingPropertyDefinition.PropertySetDefinitions
-                    .OfType<IIfcPropertySet>()
-                    .Where(ps => requiredPSetNames.Contains(ps.Name.ToString(), StringComparer.OrdinalIgnoreCase))
-                    .ToList();
+                // Get property sets from this relationship — optionally filtered by name
+                IEnumerable<IIfcPropertySet> psetQuery = rel.RelatingPropertyDefinition.PropertySetDefinitions
+                    .OfType<IIfcPropertySet>();
+
+                List<IIfcPropertySet> matchingPSets;
+                if (filterByPSetName)
+                {
+                    matchingPSets = psetQuery
+                        .Where(ps => requiredPSetNames.Contains(ps.Name.ToString(), StringComparer.OrdinalIgnoreCase))
+                        .ToList();
+                }
+                else
+                {
+                    matchingPSets = psetQuery.ToList();
+                }
 
                 if (!matchingPSets.Any())
                     continue;
@@ -1047,7 +1059,6 @@ namespace IfcComparison.Models
                     // Filter by target type if specified
                     if (targetEntityType != null)
                     {
-                        var objType = obj.GetType();
                         var isMatch = targetEntityType.IsInstanceOfType(obj);
                         
                         if (!isMatch)
@@ -1070,7 +1081,7 @@ namespace IfcComparison.Models
 
             // Log filter statistics for debugging
             var logger = IfcComparison.Logging.LoggingService.CreateLogger(typeof(IfcTools).FullName);
-            logger.LogInformation($"BuildObjectToPropertySetsCache: Checked {totalObjectsChecked} objects, filtered out {filteredOutCount}, kept {cache.Count}. TargetType: {targetEntityType?.Name ?? "NULL"}");
+            logger.LogInformation($"BuildObjectToPropertySetsCache: Checked {totalObjectsChecked} objects, filtered out {filteredOutCount}, kept {cache.Count}. TargetType: {targetEntityType?.Name ?? "NULL"}, PSetFilter: {(filterByPSetName ? string.Join(",", requiredPSetNames) : "ALL")}");
 
             return cache;
         }
@@ -1078,7 +1089,9 @@ namespace IfcComparison.Models
         /// <summary>
         /// PERFORMANCE: Builds a lookup of ComparisonValue → Objects using forward lookups.
         /// Returns both the lookup and a cache of Object → PropertySets for later use.
-        /// The comparison value is extracted PER OBJECT to ensure correct matching.
+        /// The comparison value is extracted PER OBJECT by scanning ALL PSets on that object
+        /// (not only <paramref name="requiredPSetNames"/>), so that objects whose identifier
+        /// property lives in a different PSet are still matched correctly.
         /// </summary>
         public static (Dictionary<string, List<IIfcObject>> ObjectLookup, Dictionary<IIfcObject, List<IIfcPropertySet>> PropertySetsCache) 
             BuildComparisonLookupWithPropertySets(
@@ -1090,30 +1103,37 @@ namespace IfcComparison.Models
             var objectLookup = new Dictionary<string, List<IIfcObject>>();
             var propertySetsCache = new Dictionary<IIfcObject, List<IIfcPropertySet>>();
 
-            // First, build a complete object-to-propertysets cache
-            var allObjectPSets = BuildObjectToPropertySetsCache(model, requiredPSetNames, targetEntityType);
+            // Build a cache of the required PSets per object (used for property comparison)
+            var requiredObjectPSets = BuildObjectToPropertySetsCache(model, requiredPSetNames, targetEntityType);
 
-            // Now process each object and extract its comparison value
-            foreach (var kvp in allObjectPSets)
+            // Build a cache of ALL PSets per object (used for comparisonOperator lookup)
+            // Pass null to get every PSet, filtered only by entity type.
+            var allObjectPSets = BuildObjectToPropertySetsCache(model, null, targetEntityType);
+
+            // Process each object that has at least one required PSet
+            foreach (var kvp in requiredObjectPSets)
             {
                 var obj = kvp.Key;
                 var psets = kvp.Value;
 
-                // Cache property sets for this object
+                // Cache the required property sets for this object
                 propertySetsCache[obj] = psets;
 
-                // Find the comparison value from this object's property sets
+                // Find the comparison value by searching ALL PSets on this object
                 string comparisonValue = null;
-                foreach (var pset in psets)
+                if (allObjectPSets.TryGetValue(obj, out var allPsets))
                 {
-                    var prop = pset.HasProperties
-                        .OfType<IIfcPropertySingleValue>()
-                        .FirstOrDefault(p => p.Name.ToString().Contains(comparisonOperator));
-                    
-                    if (prop?.NominalValue != null)
+                    foreach (var pset in allPsets)
                     {
-                        comparisonValue = prop.NominalValue.ToString();
-                        break;
+                        var prop = pset.HasProperties
+                            .OfType<IIfcPropertySingleValue>()
+                            .FirstOrDefault(p => p.Name.ToString().Contains(comparisonOperator));
+
+                        if (prop?.NominalValue != null)
+                        {
+                            comparisonValue = prop.NominalValue.ToString();
+                            break;
+                        }
                     }
                 }
 

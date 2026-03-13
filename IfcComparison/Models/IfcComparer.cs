@@ -77,13 +77,15 @@ namespace IfcComparison.Models
                 ComparedIfcObjects = new Dictionary<IIfcObject, Dictionary<string, string>>()
             };
 
-            int totalEntityCount = Entities.Count;
+            // Expand multi-value / wildcard Entity and PSetName fields into concrete single entries
+            var expandedEntities = Entities.SelectMany(e => e.Expand()).ToList();
+            int totalEntityCount = expandedEntities.Count;
 
             // PERFORMANCE IMPROVEMENT: Process entities in parallel when safe to do so
             // Note: We need to be careful with IfcStore thread-safety
             var lockObject = new object();
-            
-            var tasks = Entities.Select(async (entity, index) =>
+
+            var tasks = expandedEntities.Select(async (entity, index) =>
             {
                 var currentEntityIndex = index + 1;
                 _logger.LogInformation($"Processing entity {currentEntityIndex}/{totalEntityCount}: {entity.Entity}");
@@ -143,7 +145,7 @@ namespace IfcComparison.Models
             IfcWriter = new IfcWriter(IfcComparisonResult, NewModelQA.SchemaVersion, FileNameSaveAs);
 
             // Now write all results to file once
-            if (Entities.Any())
+            if (expandedEntities.Any())
             {
                 _logger.LogInformation("Writing results to file...");
                 
@@ -151,7 +153,7 @@ namespace IfcComparison.Models
                 var objectPSetMap = new Dictionary<Xbim.Ifc4.Interfaces.IIfcObject, string>();
 
                 // Create combined results with proper PSetName mapping
-                foreach (var entity in Entities)
+                foreach (var entity in expandedEntities)
                 {
                     // Find objects related to this entity type
                     var entityObjects = IfcComparisonResult.ComparedIfcObjects
@@ -482,9 +484,20 @@ namespace IfcComparison.Models
 
         private static string GetPropertyNominalValue(string comparisonOperator, IfcObjectStorage newObject)
         {
-            var idValue = (IIfcPropertySingleValue)newObject.PropertySet.HasProperties.FirstOrDefault(prop => prop.Name.ToString().Contains(comparisonOperator));
-            var idNomValue = idValue?.NominalValue?.ToString() ?? string.Empty;
-            return idNomValue;
+            // Try the per-object cache first (populated from ALL PSets by IfcComparerObjects).
+            // This handles the case where the comparisonOperator property lives in a PSet
+            // that is not listed in IfcPropertySets.
+            if (newObject.ObjectComparisonIdCache != null && newObject.ObjectComparisonIdCache.Count > 0)
+            {
+                var firstObj = newObject.IfcObjects?.Values.FirstOrDefault();
+                if (firstObj != null && newObject.ObjectComparisonIdCache.TryGetValue(firstObj, out var cached))
+                    return cached ?? string.Empty;
+            }
+
+            // Fall back to scanning the stored PropertySet directly
+            var idValue = (IIfcPropertySingleValue)newObject.PropertySet?.HasProperties
+                .FirstOrDefault(prop => prop.Name.ToString().Contains(comparisonOperator));
+            return idValue?.NominalValue?.ToString() ?? string.Empty;
         }
 
         /// <summary>

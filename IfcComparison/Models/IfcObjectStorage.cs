@@ -20,6 +20,13 @@ namespace IfcComparison.Models
         public IIfcPropertySet PropertySet { get; set; }
 
         /// <summary>
+        /// Per-object cache of the comparisonOperator nominal value, populated by
+        /// IfcComparerObjects by scanning ALL PSets on each object (not just the required PSets).
+        /// Key: IIfcObject, Value: nominal value string of the comparisonOperator property.
+        /// </summary>
+        public Dictionary<IIfcObject, string> ObjectComparisonIdCache { get; set; } = new Dictionary<IIfcObject, string>();
+
+        /// <summary>
         /// Default constructor for simplified initialization from IfcComparerObjects
         /// </summary>
         public IfcObjectStorage()
