@@ -134,6 +134,35 @@ namespace IfcComparison.Models
         }
 
         /// <summary>
+        /// Returns true if the model contains at least one instance of the given interface type.
+        /// Uses the same reflection-based OfType call as GetModelInstancesByInvokeReflection but
+        /// short-circuits on the first match for performance.
+        /// </summary>
+        public static bool HasAnyInstances(IfcStore model, Type interfaceType)
+        {
+            if (model == null || interfaceType == null)
+                return false;
+
+            try
+            {
+                var method = typeof(IReadOnlyEntityCollection).GetMethods()?.FirstOrDefault(
+                    n => n.Name.Equals("OfType") &&
+                    n.IsGenericMethod && n.GetParameters().Length == 0);
+
+                if (method == null)
+                    return false;
+
+                var generic = method.MakeGenericMethod(interfaceType);
+                var instances = (IEnumerable<IPersistEntity>)generic.Invoke(model.Instances, new object[] { });
+                return instances.Any();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Not in use
         /// </summary>
         /// <param name="propertySets"></param>

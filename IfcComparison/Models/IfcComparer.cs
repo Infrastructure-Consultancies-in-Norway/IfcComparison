@@ -79,13 +79,29 @@ namespace IfcComparison.Models
 
             // Expand multi-value / wildcard Entity and PSetName fields into concrete single entries
             var expandedEntities = Entities.SelectMany(e => e.Expand()).ToList();
-            int totalEntityCount = expandedEntities.Count;
+
+            // Filter to only entities whose type exists in at least one of the two models.
+            // This avoids pointless iterations when "*" expands to hundreds of entity types.
+            var filteredEntities = expandedEntities
+                .Where(e =>
+                {
+                    var t = IfcTools.GetInterfaceType(e.Entity);
+                    if (t == null) return false;
+                    return IfcTools.HasAnyInstances(OldModel, t) || IfcTools.HasAnyInstances(NewModelQA, t);
+                })
+                .ToList();
+
+            int skipped = expandedEntities.Count - filteredEntities.Count;
+            if (skipped > 0)
+                _logger.LogInformation($"Skipped {skipped} entity type(s) with no instances in either model.");
+
+            int totalEntityCount = filteredEntities.Count;
 
             // PERFORMANCE IMPROVEMENT: Process entities in parallel when safe to do so
             // Note: We need to be careful with IfcStore thread-safety
             var lockObject = new object();
 
-            var tasks = expandedEntities.Select(async (entity, index) =>
+            var tasks = filteredEntities.Select(async (entity, index) =>
             {
                 var currentEntityIndex = index + 1;
                 _logger.LogInformation($"Processing entity {currentEntityIndex}/{totalEntityCount}: {entity.Entity}");
@@ -145,7 +161,7 @@ namespace IfcComparison.Models
             IfcWriter = new IfcWriter(IfcComparisonResult, NewModelQA.SchemaVersion, FileNameSaveAs);
 
             // Now write all results to file once
-            if (expandedEntities.Any())
+            if (filteredEntities.Any())
             {
                 _logger.LogInformation("Writing results to file...");
                 
@@ -153,7 +169,7 @@ namespace IfcComparison.Models
                 var objectPSetMap = new Dictionary<Xbim.Ifc4.Interfaces.IIfcObject, string>();
 
                 // Create combined results with proper PSetName mapping
-                foreach (var entity in expandedEntities)
+                foreach (var entity in filteredEntities)
                 {
                     // Find objects related to this entity type
                     var entityObjects = IfcComparisonResult.ComparedIfcObjects
