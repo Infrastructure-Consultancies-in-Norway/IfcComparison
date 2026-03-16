@@ -4,6 +4,13 @@
   "FilePathIFCToQA": "",
   "DataGridContentIFCEntities": [
     {
+      "PSetName": "QA_PSET",
+      "Entity": "IIfcObject",
+      "IfcPropertySets": [ "MERKNADER" ],
+      "ComparisonOperator": "K001",
+      "ComparisonMethod": "Contains"
+    },
+    {
       "PSetName": "QA_REBAR",
       "Entity": "IIfcReinforcingBar",
       "IfcPropertySets": [ "MERKNADER" ],
