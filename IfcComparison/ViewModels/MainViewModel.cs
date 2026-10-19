@@ -309,34 +309,51 @@ namespace IfcComparison.ViewModels
                 return;
             }
 
-            if (commandName == nameof(BrowseOldIFCFileCommand))
+            try
             {
-                IsOldIFCLoaded = strNotLoaded;
-                FilePathOldIFC = fileName;
-                OutputConsole += $"IFC file: {Path.GetFileName(FilePathOldIFC)} is loading..." + Environment.NewLine;
-                OldModel = await OpenIFCModelAsync(FilePathOldIFC);
-                IsOldIFCLoaded = strLoaded;
-                OutputConsole += $"IFC file: {Path.GetFileName(FilePathOldIFC)} {strLoaded}" + Environment.NewLine;
-            }
-            else if (commandName == nameof(BrowseNewIFCFileCommand))
-            {
-                IsNewIFCLoaded = strNotLoaded;
-                IsNewIFCQALoaded = strNotLoaded;
-                FilePathNewIFC = fileName;
-                OutputConsole += $"IFC file: {Path.GetFileName(FilePathNewIFC)} is loading..." + Environment.NewLine;
-                if (!string.IsNullOrEmpty(fileName))
+                if (commandName == nameof(BrowseOldIFCFileCommand))
                 {
-                    FilePathIFCToQA = Path.Combine(Path.GetDirectoryName(fileName), Path.GetFileNameWithoutExtension(fileName) + "_QA" + Path.GetExtension(fileName));
+                    IsOldIFCLoaded = strNotLoaded;
+                    FilePathOldIFC = fileName;
+                    OutputConsole += $"IFC file: {Path.GetFileName(FilePathOldIFC)} is loading..." + Environment.NewLine;
+                    OldModel = await OpenIFCModelAsync(FilePathOldIFC);
+                    if (OldModel == null)
+                    {
+                        return;
+                    }
+                    IsOldIFCLoaded = strLoaded;
+                    OutputConsole += $"IFC file: {Path.GetFileName(FilePathOldIFC)} {strLoaded}" + Environment.NewLine;
                 }
-                File.Copy(FilePathNewIFC, FilePathIFCToQA, true);
-                OutputConsole += $"IFC file: {Path.GetFileName(FilePathIFCToQA)} is loading..." + Environment.NewLine;
+                else if (commandName == nameof(BrowseNewIFCFileCommand))
+                {
+                    IsNewIFCLoaded = strNotLoaded;
+                    IsNewIFCQALoaded = strNotLoaded;
+                    FilePathNewIFC = fileName;
+                    OutputConsole += $"IFC file: {Path.GetFileName(FilePathNewIFC)} is loading..." + Environment.NewLine;
+                    if (!string.IsNullOrEmpty(fileName))
+                    {
+                        FilePathIFCToQA = Path.Combine(Path.GetDirectoryName(fileName), Path.GetFileNameWithoutExtension(fileName) + "_QA" + Path.GetExtension(fileName));
+                    }
+                    File.Copy(FilePathNewIFC, FilePathIFCToQA, true);
+                    OutputConsole += $"IFC file: {Path.GetFileName(FilePathIFCToQA)} is loading..." + Environment.NewLine;
 
-                IsNewIFCLoaded = strLoaded;
-                OutputConsole += $"IFC file: {Path.GetFileName(FilePathNewIFC)} {strLoaded}" + Environment.NewLine;
+                    IsNewIFCLoaded = strLoaded;
+                    OutputConsole += $"IFC file: {Path.GetFileName(FilePathNewIFC)} {strLoaded}" + Environment.NewLine;
 
-                NewModelQA = await OpenIFCModelAsync(FilePathIFCToQA);
-                IsNewIFCQALoaded = strLoaded;
-                OutputConsole += $"IFC file: {Path.GetFileName(FilePathIFCToQA)} {strLoaded}" + Environment.NewLine;
+                    NewModelQA = await OpenIFCModelAsync(FilePathIFCToQA);
+                    if (NewModelQA == null)
+                    {
+                        return;
+                    }
+                    IsNewIFCQALoaded = strLoaded;
+                    OutputConsole += $"IFC file: {Path.GetFileName(FilePathIFCToQA)} {strLoaded}" + Environment.NewLine;
+                }
+            }
+            catch (Exception ex)
+            {
+                // async void: any unhandled exception here would terminate the application.
+                OutputConsole += $"Error loading IFC file: {ex.Message}" + Environment.NewLine;
+                MessageBox.Show(ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -378,6 +395,11 @@ namespace IfcComparison.ViewModels
 
             OldModel = await tasks[0];
             NewModelQA = await tasks[1];
+
+            if (OldModel == null || NewModelQA == null)
+            {
+                return;
+            }
 
             IsOldIFCLoaded = strLoaded;
             OutputConsole += $"IFC file: {Path.GetFileName(FilePathOldIFC)} {strLoaded}" + Environment.NewLine;
@@ -488,9 +510,37 @@ namespace IfcComparison.ViewModels
 
         private async Task<IfcStore> OpenIFCModelAsync(string fileName)
         {
-            IfcStore.ModelProviderFactory.UseHeuristicModelProvider();
-            var model = await Task.Run(() => OpenModel(fileName));
-            return model;
+            try
+            {
+                return await Task.Run(() => OpenModel(fileName));
+            }
+            catch (Exception ex)
+            {
+                var schema = GetIfcSchemaFromHeader(fileName);
+                var schemaInfo = string.IsNullOrEmpty(schema) ? "" : $" (schema: {schema}, supported: IFC2X3, IFC4, IFC4X3)";
+                var message = $"Failed to open IFC file {Path.GetFileName(fileName)}{schemaInfo}: {ex.Message}";
+                OutputConsole += message + Environment.NewLine;
+                MessageBox.Show(message, "Error opening IFC", MessageBoxButton.OK, MessageBoxImage.Error);
+                return null;
+            }
+        }
+
+        private static string GetIfcSchemaFromHeader(string fileName)
+        {
+            try
+            {
+                foreach (var line in File.ReadLines(fileName).Take(50))
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(line, @"FILE_SCHEMA\s*\(\s*\(\s*'([^']+)'", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (match.Success)
+                        return match.Groups[1].Value;
+                }
+            }
+            catch
+            {
+                // Header sniffing is best-effort only.
+            }
+            return null;
         }
 
         private IfcStore OpenModel(string fileName)

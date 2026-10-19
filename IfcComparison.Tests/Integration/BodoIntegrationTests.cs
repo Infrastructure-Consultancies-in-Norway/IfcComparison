@@ -209,7 +209,7 @@ namespace IfcComparison.Tests.Integration
             }
 
             // Assert - reload QA model to verify writes
-            _fixture.QAModel.Dispose();
+            // Do not dispose _fixture.QAModel: it is shared by all tests in this class.
             var reloadedQA = Xbim.Ifc.IfcStore.Open(_fixture.QAFilePath);
 
             ComparisonResultValidator.ValidateQAFileWritten(reloadedQA, config.QAPSetName);

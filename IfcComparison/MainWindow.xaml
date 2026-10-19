@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
-        xmlns:local="clr-namespace:COWI_Bridge_Toolbox"
+        xmlns:local="clr-namespace:IfcComparison"
         xmlns:converters="clr-namespace:IfcComparison.Converters"
         mc:Ignorable="d"
         MinWidth="1400" MinHeight="500" >

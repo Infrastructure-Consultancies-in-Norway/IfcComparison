@@ -6,6 +6,7 @@ using System.Windows;
 using IfcComparison.CLI;
 using IfcComparison.Logging;
 using Microsoft.Extensions.Logging;
+using Xbim.Common.Configuration;
 
 namespace IfcComparison
 {
@@ -19,6 +20,9 @@ namespace IfcComparison
             // Initialize logging
             LoggerInitializer.EnsureInitialized();
             var logger = LoggingService.CreateLogger<App>();
+
+            // xbim 6: must be configured once, before the first IfcStore.Open
+            XbimServices.Current.ConfigureServices(s => s.AddXbimToolkit(opt => opt.AddHeuristicModel()));
             
             // Check for CLI mode
             if (e.Args.Length > 0)
@@ -84,6 +88,14 @@ namespace IfcComparison
             
             // GUI mode
             base.OnStartup(e);
+            new Window
+            {
+                Title = "IfcComparison",
+                Content = new MainWindow(),
+                Width = 1450,
+                Height = 800,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen
+            }.Show();
             logger.LogDebug("IfcComparison standalone application started at {Time}", DateTime.Now);
         }
         

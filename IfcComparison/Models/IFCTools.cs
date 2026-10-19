@@ -572,6 +572,30 @@ namespace IfcComparison.Models
                 //Add the property set to the instance
                 pSetRel.RelatedObjects.Add((Xbim.Ifc2x3.Kernel.IfcObject)instance);
             }
+            else if (ifcSchema == XbimSchemaVersion.Ifc4x3)
+            {
+                // create new property set to host properties
+                var pSetRel = model.Instances.New<Xbim.Ifc4x3.Kernel.IfcRelDefinesByProperties>(r =>
+                {
+                    var guid = Guid.NewGuid();
+                    var globalId = new Xbim.Ifc4x3.UtilityResource.IfcGloballyUniqueId(guid.ToString());
+                    r.GlobalId = globalId;
+                    r.RelatingPropertyDefinition = model.Instances.New<Xbim.Ifc4x3.Kernel.IfcPropertySet>(pSet =>
+                    {
+                        pSet.Name = newPropSetName;
+                        foreach (var prop in properties)
+                        {
+                            pSet.HasProperties.Add(model.Instances.New<Xbim.Ifc4x3.PropertyResource.IfcPropertySingleValue>(p =>
+                            {
+                                p.Name = prop.Key;
+                                p.NominalValue = new Xbim.Ifc4x3.MeasureResource.IfcText(prop.Value);
+                            }));
+                        }
+                    });
+                });
+                //Add the property set to the instance
+                pSetRel.RelatedObjects.Add((Xbim.Ifc4x3.Kernel.IfcObject)instance);
+            }
             else
             {
                 // create new property set to host properties

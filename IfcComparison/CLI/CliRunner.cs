@@ -250,7 +250,6 @@ namespace IfcComparison.CLI
         private async Task<IfcStore> OpenIFCModelAsync(string fileName, string description)
         {
             Console.WriteLine($"  Loading {description}: {Path.GetFileName(fileName)}...");
-            IfcStore.ModelProviderFactory.UseHeuristicModelProvider();
 
             var model = await Task.Run(() =>
             {
